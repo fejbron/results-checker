@@ -33,8 +33,16 @@ index number and a PIN.
 1. Create a project at [supabase.com](https://supabase.com).
 2. In the dashboard, open **SQL Editor** and run the migration in
    [`supabase/migrations/0001_initial_schema.sql`](supabase/migrations/0001_initial_schema.sql).
-3. Create your first lecturer account: **Authentication → Users → Add user**
-   (set an email + password, and mark it as confirmed). Repeat for each lecturer.
+3. Create your first lecturer/admin account (either option works):
+   - **From the terminal** once `.env.local` is filled in (see below):
+
+     ```bash
+     npm run create-admin -- lecturer@school.edu "a-strong-password"
+     ```
+
+     Re-running with the same email just resets that account's password.
+   - **Or from the dashboard:** **Authentication → Users → Add user**, set an
+     email + password and mark it confirmed. Repeat for each lecturer.
 4. Collect your keys from **Project Settings → API**:
    - Project URL
    - `anon` public key
