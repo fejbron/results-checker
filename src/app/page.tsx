@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { GraduationCap } from "lucide-react";
 import ResultsChecker from "./results-checker";
 
 export default function Home() {
@@ -7,12 +6,7 @@ export default function Home() {
     <main className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-4 py-6">
       {/* Top bar */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm shadow-blue-600/30">
-            <GraduationCap className="h-5 w-5" />
-          </span>
-          <span className="font-semibold text-slate-900">Results Checker</span>
-        </div>
+        <span className="text-lg font-bold text-slate-900">Results Checker</span>
         <Link href="/admin" className="btn-secondary">
           Lecturer sign in
         </Link>

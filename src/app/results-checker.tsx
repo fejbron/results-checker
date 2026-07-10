@@ -1,7 +1,6 @@
 "use client";
 
 import { useActionState } from "react";
-import { Search, BookOpen, FileText, Trophy } from "lucide-react";
 import { lookupResults, type LookupState } from "./student-actions";
 import type { CourseResult } from "@/lib/types";
 
@@ -48,7 +47,6 @@ export default function ResultsChecker() {
           </p>
         )}
         <button type="submit" className="btn-primary mt-4 w-full" disabled={pending}>
-          <Search className="h-4 w-4" />
           {pending ? "Checking…" : "View my results"}
         </button>
       </form>
@@ -82,26 +80,18 @@ function CourseCard({ result }: { result: CourseResult }) {
   return (
     <div className="card space-y-4">
       <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="icon-chip bg-blue-50 text-blue-600">
-            <BookOpen className="h-5 w-5" />
-          </span>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-              {result.courseCode}
-            </p>
-            <h3 className="text-base font-semibold text-slate-900">{result.courseName}</h3>
-          </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+            {result.courseCode}
+          </p>
+          <h3 className="text-base font-semibold text-slate-900">{result.courseName}</h3>
         </div>
-        <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-2 text-right">
-          <Trophy className="h-5 w-5 text-amber-400" />
-          <div>
-            <div className="text-lg font-bold leading-none text-slate-900">
-              {result.percentage}%
-            </div>
-            <div className="text-xs text-slate-400">
-              {result.mark} / {result.outOf}
-            </div>
+        <div className="rounded-2xl bg-slate-50 px-4 py-2 text-right">
+          <div className="text-lg font-bold leading-none text-slate-900">
+            {result.percentage}%
+          </div>
+          <div className="text-xs text-slate-400">
+            {result.mark} / {result.outOf}
           </div>
         </div>
       </div>
@@ -112,10 +102,7 @@ function CourseCard({ result }: { result: CourseResult }) {
             key={i}
             className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-2.5"
           >
-            <span className="flex items-center gap-2.5 text-sm text-slate-600">
-              <FileText className="h-4 w-4 text-slate-400" />
-              {c.label}
-            </span>
+            <span className="text-sm text-slate-600">{c.label}</span>
             <span className="text-sm font-semibold tabular-nums text-slate-900">
               {c.value === null ? "—" : c.value}{" "}
               <span className="font-normal text-slate-400">/ {c.maxScore}</span>

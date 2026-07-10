@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { BookOpen, Users, ListChecks, ArrowUpRight, GraduationCap } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { deleteCourse } from "./actions";
 import CreateCourseForm from "./create-course-form";
@@ -15,11 +14,7 @@ type CourseRow = {
   score_columns: { count: number }[];
 };
 
-const CHIP_STYLES = [
-  { bg: "bg-blue-50", fg: "text-blue-600" },
-  { bg: "bg-teal-50", fg: "text-teal-600" },
-  { bg: "bg-orange-50", fg: "text-orange-500" },
-];
+const ACCENTS = ["text-blue-600", "text-teal-600", "text-orange-500"];
 
 export default async function AdminDashboard() {
   const supabase = await createClient();
@@ -42,9 +37,9 @@ export default async function AdminDashboard() {
   const initials = (user?.email ?? "?").slice(0, 2).toUpperCase();
 
   const stats = [
-    { icon: BookOpen, label: "Courses", value: list.length },
-    { icon: Users, label: "Students", value: totalStudents },
-    { icon: ListChecks, label: "Assessments", value: totalColumns },
+    { label: "Courses", value: list.length },
+    { label: "Students", value: totalStudents },
+    { label: "Assessments", value: totalColumns },
   ];
 
   return (
@@ -62,23 +57,16 @@ export default async function AdminDashboard() {
           </div>
         </header>
 
-        {/* Stat chips */}
+        {/* Stat cards */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {stats.map((s, i) => {
-            const Icon = s.icon;
-            const style = CHIP_STYLES[i % CHIP_STYLES.length];
-            return (
-              <div key={s.label} className="card flex items-center gap-3 p-4">
-                <span className={`icon-chip ${style.bg} ${style.fg}`}>
-                  <Icon className="h-5 w-5" />
-                </span>
-                <div>
-                  <p className="text-xs font-medium text-slate-400">{s.label}</p>
-                  <p className="text-xl font-bold text-slate-900">{s.value}</p>
-                </div>
-              </div>
-            );
-          })}
+          {stats.map((s, i) => (
+            <div key={s.label} className="card p-5">
+              <p className="text-xs font-medium text-slate-400">{s.label}</p>
+              <p className={`mt-1 text-2xl font-bold ${ACCENTS[i % ACCENTS.length]}`}>
+                {s.value}
+              </p>
+            </div>
+          ))}
         </div>
 
         {/* Courses */}
@@ -89,34 +77,16 @@ export default async function AdminDashboard() {
           </div>
 
           {list.length === 0 ? (
-            <div className="card flex flex-col items-center gap-2 py-12 text-center">
-              <span className="icon-chip bg-blue-50 text-blue-600">
-                <BookOpen className="h-5 w-5" />
-              </span>
+            <div className="card py-12 text-center">
               <p className="text-sm text-slate-500">
                 No courses yet. Create your first one on the right.
               </p>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {list.map((course, i) => {
-                const style = CHIP_STYLES[i % CHIP_STYLES.length];
-                return (
-                  <div key={course.id} className="card group flex flex-col gap-4">
-                    <div className="flex items-start justify-between">
-                      <span className={`icon-chip ${style.bg} ${style.fg}`}>
-                        <BookOpen className="h-5 w-5" />
-                      </span>
-                      <form action={deleteCourse}>
-                        <input type="hidden" name="courseId" value={course.id} />
-                        <button
-                          type="submit"
-                          className="rounded-full px-3 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600"
-                        >
-                          Delete
-                        </button>
-                      </form>
-                    </div>
+              {list.map((course) => (
+                <div key={course.id} className="card flex flex-col gap-4">
+                  <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
                         {course.code}
@@ -129,15 +99,24 @@ export default async function AdminDashboard() {
                         {course.score_columns?.[0]?.count ?? 0} assessments
                       </p>
                     </div>
-                    <Link
-                      href={`/admin/courses/${course.id}`}
-                      className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:gap-2"
-                    >
-                      Manage <ArrowUpRight className="h-4 w-4" />
-                    </Link>
+                    <form action={deleteCourse}>
+                      <input type="hidden" name="courseId" value={course.id} />
+                      <button
+                        type="submit"
+                        className="rounded-full px-3 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      >
+                        Delete
+                      </button>
+                    </form>
                   </div>
-                );
-              })}
+                  <Link
+                    href={`/admin/courses/${course.id}`}
+                    className="mt-auto text-sm font-semibold text-blue-600 hover:underline"
+                  >
+                    Manage →
+                  </Link>
+                </div>
+              ))}
             </div>
           )}
         </section>
@@ -170,12 +149,7 @@ export default async function AdminDashboard() {
         </div>
 
         <div className="card">
-          <div className="mb-3 flex items-center gap-2">
-            <span className="icon-chip h-9 w-9 bg-teal-50 text-teal-600">
-              <GraduationCap className="h-5 w-5" />
-            </span>
-            <h2 className="text-base font-semibold text-slate-900">Create a course</h2>
-          </div>
+          <h2 className="mb-3 text-base font-semibold text-slate-900">Create a course</h2>
           <CreateCourseForm />
         </div>
       </div>

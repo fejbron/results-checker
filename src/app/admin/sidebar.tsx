@@ -2,39 +2,44 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { GraduationCap, LayoutGrid, ExternalLink, LogOut } from "lucide-react";
 import { signOut } from "./auth-actions";
 
 export default function Sidebar() {
   const pathname = usePathname();
   const onDashboard = pathname === "/admin";
 
+  const linkBase =
+    "block rounded-xl px-4 py-2.5 text-sm font-medium transition-colors";
+
   return (
-    <aside className="sticky top-0 flex h-screen w-20 shrink-0 flex-col items-center gap-2 py-6">
-      {/* Brand mark */}
-      <Link
-        href="/admin"
-        className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm shadow-blue-600/30"
-        title="Results Checker"
-      >
-        <GraduationCap className="h-6 w-6" />
+    <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col py-6 sm:flex">
+      <Link href="/admin" className="mb-6 px-4 text-lg font-bold text-slate-900">
+        Results Checker
       </Link>
 
-      <Link
-        href="/admin"
-        className={`nav-item ${onDashboard ? "nav-item-active" : ""}`}
-        title="Dashboard"
-      >
-        <LayoutGrid className="h-5 w-5" />
-      </Link>
+      <nav className="space-y-1">
+        <Link
+          href="/admin"
+          className={`${linkBase} ${
+            onDashboard
+              ? "bg-blue-50 text-blue-600"
+              : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+          }`}
+        >
+          Dashboard
+        </Link>
+        <Link
+          href="/"
+          target="_blank"
+          className={`${linkBase} text-slate-500 hover:bg-slate-100 hover:text-slate-700`}
+        >
+          Student site
+        </Link>
+      </nav>
 
-      <Link href="/" className="nav-item" title="View student site" target="_blank">
-        <ExternalLink className="h-5 w-5" />
-      </Link>
-
-      <form action={signOut} className="mt-auto">
-        <button type="submit" className="nav-item" title="Sign out">
-          <LogOut className="h-5 w-5" />
+      <form action={signOut} className="mt-auto px-1">
+        <button type="submit" className="btn-secondary w-full">
+          Sign out
         </button>
       </form>
     </aside>

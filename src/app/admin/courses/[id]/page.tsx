@@ -1,13 +1,5 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import {
-  ArrowLeft,
-  BookOpen,
-  Target,
-  Users,
-  ClipboardList,
-  X,
-} from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import type { Course, ScoreColumn } from "@/lib/types";
 import { deleteColumn, removeStudent } from "../../actions";
@@ -77,35 +69,25 @@ export default async function CoursePage({
     <div className="mx-auto max-w-4xl space-y-5">
       <Link
         href="/admin"
-        className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-700"
+        className="text-sm font-medium text-slate-500 hover:text-slate-700"
       >
-        <ArrowLeft className="h-4 w-4" /> Back to dashboard
+        ← Back to dashboard
       </Link>
-      <div className="card flex items-center gap-4">
-        <span className="icon-chip h-14 w-14 bg-blue-50 text-blue-600">
-          <BookOpen className="h-6 w-6" />
-        </span>
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
-            {course.code}
-          </p>
-          <h1 className="text-2xl font-bold text-slate-900">{course.name}</h1>
-        </div>
+      <div className="card">
+        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+          {course.code}
+        </p>
+        <h1 className="text-2xl font-bold text-slate-900">{course.name}</h1>
       </div>
 
       {/* Score columns */}
       <section className="card space-y-4">
-        <div className="flex items-center gap-3">
-          <span className="icon-chip h-9 w-9 bg-blue-50 text-blue-600">
-            <BookOpen className="h-5 w-5" />
-          </span>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Score columns</h2>
-            <p className="text-sm text-slate-500">
-              Add any assessment — assignment, presentation, project, exam — with
-              its maximum score.
-            </p>
-          </div>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Score columns</h2>
+          <p className="text-sm text-slate-500">
+            Add any assessment — assignment, presentation, project, exam — with
+            its maximum score.
+          </p>
         </div>
         {cols.length > 0 ? (
           <ul className="flex flex-wrap gap-2">
@@ -124,7 +106,7 @@ export default async function CoursePage({
                     className="flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:bg-red-100 hover:text-red-600"
                     title={`Delete ${col.label}`}
                   >
-                    <X className="h-3.5 w-3.5" />
+                    ×
                   </button>
                 </form>
               </li>
@@ -138,41 +120,31 @@ export default async function CoursePage({
 
       {/* Overall score */}
       <section className="card space-y-4">
-        <div className="flex items-center gap-3">
-          <span className="icon-chip h-9 w-9 bg-teal-50 text-teal-600">
-            <Target className="h-5 w-5" />
-          </span>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Overall score</h2>
-            <p className="text-sm text-slate-500">
-              Optionally scale the combined columns to a single mark — e.g. grade
-              everything out of 40. Leave blank to total the raw column maximums
-              {cols.length > 0 && (
-                <>
-                  {" "}
-                  (currently {cols.reduce((s, c) => s + Number(c.max_score), 0)})
-                </>
-              )}
-              .
-            </p>
-          </div>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Overall score</h2>
+          <p className="text-sm text-slate-500">
+            Optionally scale the combined columns to a single mark — e.g. grade
+            everything out of 40. Leave blank to total the raw column maximums
+            {cols.length > 0 && (
+              <>
+                {" "}
+                (currently {cols.reduce((s, c) => s + Number(c.max_score), 0)})
+              </>
+            )}
+            .
+          </p>
         </div>
         <OverallScoreForm courseId={course.id} overallScore={course.overall_score} />
       </section>
 
       {/* Students */}
       <section className="card space-y-4">
-        <div className="flex items-center gap-3">
-          <span className="icon-chip h-9 w-9 bg-orange-50 text-orange-500">
-            <Users className="h-5 w-5" />
-          </span>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Students</h2>
-            <p className="text-sm text-slate-500">
-              Enroll students by index number. New students get a default PIN of
-              the last 4 digits of their index number unless you set one.
-            </p>
-          </div>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Students</h2>
+          <p className="text-sm text-slate-500">
+            Enroll students by index number. New students get a default PIN of
+            the last 4 digits of their index number unless you set one.
+          </p>
         </div>
         <AddStudentForm courseId={course.id} />
         <ImportStudentsForm courseId={course.id} />
@@ -216,16 +188,11 @@ export default async function CoursePage({
 
       {/* Scores grid */}
       <section className="card space-y-4">
-        <div className="flex items-center gap-3">
-          <span className="icon-chip h-9 w-9 bg-blue-50 text-blue-600">
-            <ClipboardList className="h-5 w-5" />
-          </span>
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Enter results</h2>
-            <p className="text-sm text-slate-500">
-              Type scores and click Save. Totals update live as you type.
-            </p>
-          </div>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Enter results</h2>
+          <p className="text-sm text-slate-500">
+            Type scores and click Save. Totals update live as you type.
+          </p>
         </div>
         {cols.length === 0 || students.length === 0 ? (
           <p className="text-sm text-slate-400">

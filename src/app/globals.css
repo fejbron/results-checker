@@ -58,17 +58,4 @@ body {
   .label {
     @apply mb-1.5 block text-sm font-medium text-slate-600;
   }
-
-  /* Coloured icon chip — the rounded pastel square in front of each stat. */
-  .icon-chip {
-    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl;
-  }
-
-  /* Sidebar nav item. */
-  .nav-item {
-    @apply flex h-11 w-11 items-center justify-center rounded-2xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600;
-  }
-  .nav-item-active {
-    @apply bg-blue-50 text-blue-600 hover:bg-blue-50 hover:text-blue-600;
-  }
 }

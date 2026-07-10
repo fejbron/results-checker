@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { KeyRound } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import ResetPasswordForm from "./reset-password-form";
 
@@ -15,9 +14,6 @@ export default async function ResetPasswordPage() {
     <main className="flex min-h-screen items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="mb-6 text-center">
-          <span className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-sm shadow-blue-600/30">
-            <KeyRound className="h-7 w-7" />
-          </span>
           <h1 className="text-2xl font-bold text-slate-900">Choose a new password</h1>
           {user?.email && (
             <p className="mt-1 text-sm text-slate-500">for {user.email}</p>
