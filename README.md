@@ -17,7 +17,10 @@ index number and a PIN.
   - A configurable, per-course **grade scale** (letter grades by percentage).
   - Enroll students by index number; auto-assign a default PIN (last 4 digits of
     the index number) or set/reset a custom PIN.
+  - **Bulk-import students from CSV** (`index number, full name, PIN` — PIN
+    optional; header row auto-detected).
   - Enter results in a grid with live totals, percentages and grades.
+  - **Forgot-password / reset-password** flow via Supabase Auth email.
 - **Student side** — no account needed.
   - Look up results with **index number + PIN**.
   - See every enrolled course with per-column scores, total, percentage and grade.
@@ -36,6 +39,9 @@ index number and a PIN.
    - Project URL
    - `anon` public key
    - `service_role` secret key
+5. For the password-reset flow, add your app URLs under **Authentication → URL
+   Configuration → Redirect URLs**, e.g. `http://localhost:3000/auth/callback`
+   and `https://your-app.vercel.app/auth/callback`.
 
 ## 2. Run locally
 
@@ -56,6 +62,8 @@ npm run dev
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
+   - `NEXT_PUBLIC_SITE_URL` (optional but recommended — your deployed URL, for
+     password-reset email links)
 3. Deploy. That's it — Fluid Compute runs the server actions (including bcrypt)
    on Node.js with no extra configuration.
 

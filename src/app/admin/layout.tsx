@@ -1,19 +1,32 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { signOut } from "./auth-actions";
+
+// Auth pages render their own full-screen layout and must not get the
+// dashboard chrome (which would also nest a second <main>).
+const STANDALONE_PATHS = [
+  "/admin/login",
+  "/admin/forgot-password",
+  "/admin/reset-password",
+];
 
 export default async function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  if (STANDALONE_PATHS.includes(pathname)) {
+    return <>{children}</>;
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // The login page renders its own full-screen layout. Only wrap in the admin
-  // chrome when a lecturer is actually signed in.
+  // Fallback: if somehow unauthenticated here, render bare (proxy will redirect).
   if (!user) {
     return <>{children}</>;
   }

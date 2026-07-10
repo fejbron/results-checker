@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { signIn, type AuthState } from "../auth-actions";
 
@@ -9,7 +10,9 @@ const initialState: AuthState = { error: null };
 export default function LoginForm() {
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") ?? "/admin";
+  const urlError = searchParams.get("error");
   const [state, formAction, pending] = useActionState(signIn, initialState);
+  const error = state.error ?? urlError;
 
   return (
     <form action={formAction} className="space-y-4">
@@ -41,10 +44,18 @@ export default function LoginForm() {
           className="input"
           placeholder="••••••••"
         />
+        <div className="mt-1 text-right">
+          <Link
+            href="/admin/forgot-password"
+            className="text-sm text-indigo-600 hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
       </div>
-      {state.error && (
+      {error && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
-          {state.error}
+          {error}
         </p>
       )}
       <button type="submit" className="btn-primary w-full" disabled={pending}>

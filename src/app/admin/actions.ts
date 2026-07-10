@@ -170,40 +170,167 @@ export async function addStudent(
   // (and reuse it) even if they belong to another lecturer's course.
   const admin = createAdminClient();
 
-  const { data: existing } = await admin
-    .from("students")
-    .select("id")
-    .eq("index_number", parsed.data.index_number)
-    .maybeSingle();
-
-  let studentId = existing?.id;
-
-  if (!studentId) {
-    const pin = parsed.data.pin ?? defaultPin(parsed.data.index_number);
-    const pin_hash = await bcrypt.hash(pin, 10);
-    const { data: created, error: createErr } = await admin
-      .from("students")
-      .insert({
-        index_number: parsed.data.index_number,
-        full_name: parsed.data.full_name,
-        pin_hash,
-      })
-      .select("id")
-      .single();
-    if (createErr || !created) return fail(createErr?.message ?? "Could not create student.");
-    studentId = created.id;
-  }
-
-  // Enroll (idempotent thanks to the unique constraint).
-  const { error: enrollErr } = await supabase
-    .from("enrollments")
-    .insert({ course_id: courseId, student_id: studentId });
-  if (enrollErr && !enrollErr.message.includes("duplicate")) {
-    return fail(enrollErr.message);
+  try {
+    await enrollStudent(admin, supabase, courseId, parsed.data);
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Could not add student.");
   }
 
   revalidatePath(`/admin/courses/${courseId}`);
   return ok;
+}
+
+// Find or create a global student by index number, then enroll them in the
+// course. Idempotent — re-enrolling an existing student is a no-op. Throws on
+// unexpected database errors. Returns whether the student was newly created.
+async function enrollStudent(
+  admin: ReturnType<typeof createAdminClient>,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  courseId: string,
+  input: { index_number: string; full_name: string; pin?: string },
+): Promise<{ created: boolean }> {
+  const { data: existing } = await admin
+    .from("students")
+    .select("id")
+    .eq("index_number", input.index_number)
+    .maybeSingle();
+
+  let studentId = existing?.id;
+  let created = false;
+
+  if (!studentId) {
+    const pin = input.pin ?? defaultPin(input.index_number);
+    const pin_hash = await bcrypt.hash(pin, 10);
+    const { data: row, error: createErr } = await admin
+      .from("students")
+      .insert({
+        index_number: input.index_number,
+        full_name: input.full_name,
+        pin_hash,
+      })
+      .select("id")
+      .single();
+    if (createErr || !row) throw new Error(createErr?.message ?? "Could not create student.");
+    studentId = row.id;
+    created = true;
+  }
+
+  const { error: enrollErr } = await supabase
+    .from("enrollments")
+    .insert({ course_id: courseId, student_id: studentId });
+  if (enrollErr && !enrollErr.message.toLowerCase().includes("duplicate")) {
+    throw new Error(enrollErr.message);
+  }
+
+  return { created };
+}
+
+// Parse simple CSV text into student rows. Accepts an optional header row and
+// columns in the order: index number, full name, PIN (PIN optional).
+function parseStudentCsv(text: string) {
+  const rows: { index_number: string; full_name: string; pin?: string }[] = [];
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  for (let i = 0; i < lines.length; i++) {
+    const cells = splitCsvLine(lines[i]);
+    // Skip a header row if the first line looks like column titles.
+    if (i === 0 && /index|name/i.test(cells[0] ?? "")) continue;
+    const [index_number, full_name, pin] = cells;
+    if (!index_number || !full_name) continue;
+    rows.push({
+      index_number: index_number.trim(),
+      full_name: full_name.trim(),
+      pin: pin?.trim() || undefined,
+    });
+  }
+  return rows;
+}
+
+// Minimal CSV line splitter that understands double-quoted fields.
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else if (ch === '"') {
+        inQuotes = false;
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      out.push(cur);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+export async function importStudents(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const courseId = String(formData.get("courseId"));
+
+  // Accept either a pasted textarea or an uploaded .csv file.
+  const file = formData.get("file");
+  let text = String(formData.get("csv") ?? "");
+  if (file instanceof File && file.size > 0) {
+    text = await file.text();
+  }
+  text = text.trim();
+  if (!text) return fail("Paste CSV rows or choose a file to import.");
+
+  const rows = parseStudentCsv(text);
+  if (rows.length === 0) {
+    return fail("No valid rows found. Use: index number, full name, PIN (optional).");
+  }
+
+  const { supabase } = await assertCourseOwner(courseId);
+  const admin = createAdminClient();
+
+  let created = 0;
+  let enrolled = 0;
+  const errors: string[] = [];
+
+  for (const raw of rows) {
+    const parsed = studentSchema.safeParse(raw);
+    if (!parsed.success) {
+      errors.push(`${raw.index_number || "(blank)"}: ${parsed.error.issues[0].message}`);
+      continue;
+    }
+    try {
+      const res = await enrollStudent(admin, supabase, courseId, parsed.data);
+      enrolled++;
+      if (res.created) created++;
+    } catch (e) {
+      errors.push(`${raw.index_number}: ${e instanceof Error ? e.message : "failed"}`);
+    }
+  }
+
+  revalidatePath(`/admin/courses/${courseId}`);
+
+  const summary = `Imported ${enrolled} student${enrolled === 1 ? "" : "s"} (${created} new)`;
+  if (errors.length) {
+    return {
+      error: `${summary}. ${errors.length} row${errors.length === 1 ? "" : "s"} skipped: ${errors
+        .slice(0, 5)
+        .join("; ")}${errors.length > 5 ? "…" : ""}`,
+    };
+  }
+  return { error: null, ok: true };
 }
 
 export async function removeStudent(formData: FormData): Promise<void> {

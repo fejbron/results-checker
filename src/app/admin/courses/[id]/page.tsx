@@ -5,6 +5,7 @@ import type { Course, ScoreColumn } from "@/lib/types";
 import { deleteColumn, removeStudent } from "../../actions";
 import AddColumnForm from "./add-column-form";
 import AddStudentForm from "./add-student-form";
+import ImportStudentsForm from "./import-students-form";
 import GradeScaleEditor from "./grade-scale-editor";
 import ResetPinForm from "./reset-pin-form";
 import ScoresGrid from "./scores-grid";
@@ -133,6 +134,7 @@ export default async function CoursePage({
           </p>
         </div>
         <AddStudentForm courseId={course.id} />
+        <ImportStudentsForm courseId={course.id} />
         {students.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
