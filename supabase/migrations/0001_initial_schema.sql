@@ -14,14 +14,6 @@ create table if not exists public.courses (
   owner_id     uuid not null references auth.users (id) on delete cascade,
   name         text not null,
   code         text not null,
-  -- Grade scale: ordered list of { min_percent, letter }, highest first.
-  grade_scale  jsonb not null default '[
-    {"min": 80, "letter": "A"},
-    {"min": 70, "letter": "B"},
-    {"min": 60, "letter": "C"},
-    {"min": 50, "letter": "D"},
-    {"min": 0,  "letter": "F"}
-  ]'::jsonb,
   created_at   timestamptz not null default now()
 );
 

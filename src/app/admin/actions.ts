@@ -10,7 +10,6 @@ import {
   studentSchema,
   pinResetSchema,
 } from "@/lib/validation";
-import { DEFAULT_GRADE_SCALE, type GradeBand } from "@/lib/types";
 
 export type ActionState = { error: string | null; ok?: boolean };
 
@@ -65,7 +64,6 @@ export async function createCourse(
     owner_id: userId,
     name: parsed.data.name,
     code: parsed.data.code,
-    grade_scale: DEFAULT_GRADE_SCALE,
   });
   if (error) return fail(error.message);
 
@@ -78,34 +76,6 @@ export async function deleteCourse(formData: FormData): Promise<void> {
   const { supabase } = await assertCourseOwner(courseId);
   await supabase.from("courses").delete().eq("id", courseId);
   revalidatePath("/admin");
-}
-
-export async function updateGradeScale(
-  _prev: ActionState,
-  formData: FormData,
-): Promise<ActionState> {
-  const courseId = String(formData.get("courseId"));
-  const raw = String(formData.get("grade_scale") ?? "");
-
-  let scale: GradeBand[];
-  try {
-    scale = JSON.parse(raw);
-    if (!Array.isArray(scale) || scale.length === 0) throw new Error();
-    scale = scale.map((b) => ({ min: Number(b.min), letter: String(b.letter) }));
-    if (scale.some((b) => Number.isNaN(b.min) || !b.letter)) throw new Error();
-  } catch {
-    return fail("Grade scale must be valid JSON like [{\"min\":80,\"letter\":\"A\"}].");
-  }
-
-  const { supabase } = await assertCourseOwner(courseId);
-  const { error } = await supabase
-    .from("courses")
-    .update({ grade_scale: scale })
-    .eq("id", courseId);
-  if (error) return fail(error.message);
-
-  revalidatePath(`/admin/courses/${courseId}`);
-  return ok;
 }
 
 export async function updateOverallScore(

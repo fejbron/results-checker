@@ -3,7 +3,6 @@
 import { useActionState, useState } from "react";
 import { saveScores, type ActionState } from "../../actions";
 import { computeResult } from "@/lib/grades";
-import type { GradeBand } from "@/lib/types";
 
 type Col = { id: string; label: string; maxScore: number };
 type Student = { id: string; index_number: string; full_name: string };
@@ -15,14 +14,12 @@ export default function ScoresGrid({
   columns,
   students,
   scoreMap,
-  gradeScale,
   overallScore,
 }: {
   courseId: string;
   columns: Col[];
   students: Student[];
   scoreMap: Record<string, Record<string, number>>;
-  gradeScale: GradeBand[];
   overallScore: number | null;
 }) {
   const [state, action, pending] = useActionState(saveScores, initial);
@@ -45,7 +42,6 @@ export default function ScoresGrid({
         const raw = values[`${studentId}__${c.id}`];
         return { maxScore: c.maxScore, value: raw === "" ? null : Number(raw) };
       }),
-      gradeScale,
       overallScore,
     );
 
@@ -65,8 +61,7 @@ export default function ScoresGrid({
                   </span>
                 </th>
               ))}
-              <th className="py-2 pr-3 text-right font-medium">Total</th>
-              <th className="py-2 text-right font-medium">Grade</th>
+              <th className="py-2 text-right font-medium">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -99,13 +94,12 @@ export default function ScoresGrid({
                       </td>
                     );
                   })}
-                  <td className="py-2 pr-3 text-right tabular-nums">
+                  <td className="py-2 text-right tabular-nums">
                     {r.mark} / {r.outOf}
                     <span className="block text-xs text-slate-400">
                       {r.percentage}%
                     </span>
                   </td>
-                  <td className="py-2 text-right font-semibold">{r.grade}</td>
                 </tr>
               );
             })}

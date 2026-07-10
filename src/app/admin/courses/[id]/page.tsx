@@ -6,7 +6,6 @@ import { deleteColumn, removeStudent } from "../../actions";
 import AddColumnForm from "./add-column-form";
 import AddStudentForm from "./add-student-form";
 import ImportStudentsForm from "./import-students-form";
-import GradeScaleEditor from "./grade-scale-editor";
 import OverallScoreForm from "./overall-score-form";
 import ResetPinForm from "./reset-pin-form";
 import ScoresGrid from "./scores-grid";
@@ -133,17 +132,6 @@ export default async function CoursePage({
         <OverallScoreForm courseId={course.id} overallScore={course.overall_score} />
       </section>
 
-      {/* Grade scale */}
-      <section className="card space-y-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">Grade scale</h2>
-          <p className="text-sm text-slate-500">
-            Letter grades are assigned by overall percentage.
-          </p>
-        </div>
-        <GradeScaleEditor courseId={course.id} scale={course.grade_scale} />
-      </section>
-
       {/* Students */}
       <section className="card space-y-4">
         <div>
@@ -211,7 +199,6 @@ export default async function CoursePage({
             columns={cols.map((c) => ({ id: c.id, label: c.label, maxScore: c.max_score }))}
             students={students}
             scoreMap={scoreMap}
-            gradeScale={course.grade_scale}
             overallScore={course.overall_score}
           />
         )}

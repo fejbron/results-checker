@@ -14,16 +14,17 @@ index number and a PIN.
 - **Admin (lecturer) side** — email/password sign-in via Supabase Auth.
   - Create courses.
   - Configure **per-course** score columns with a maximum score each.
-  - A configurable, per-course **grade scale** (letter grades by percentage).
+  - Optionally set a per-course **overall score** to scale the combined columns
+    to a single mark (e.g. everything out of 40). Blank = raw sum of maximums.
   - Enroll students by index number; auto-assign a default PIN (last 4 digits of
     the index number) or set/reset a custom PIN.
   - **Bulk-import students from CSV** (`index number, full name, PIN` — PIN
     optional; header row auto-detected).
-  - Enter results in a grid with live totals, percentages and grades.
+  - Enter results in a grid with live totals and percentages.
   - **Forgot-password / reset-password** flow via Supabase Auth email.
 - **Student side** — no account needed.
   - Look up results with **index number + PIN**.
-  - See every enrolled course with per-column scores, total, percentage and grade.
+  - See every enrolled course with per-column scores, total and percentage.
 - **Security** — Postgres Row Level Security ensures lecturers only touch their
   own courses. The student lookup runs server-side with the service-role key and
   returns data only after the PIN (bcrypt-hashed) is verified.
@@ -84,8 +85,8 @@ npm run dev
 | --- | --- |
 | Database schema + RLS | `supabase/migrations/0001_initial_schema.sql` |
 | Supabase clients | `src/lib/supabase/{client,server,admin}.ts` |
-| Grade computation | `src/lib/grades.ts` |
-| Auth guard | `src/middleware.ts` |
+| Total / percentage computation | `src/lib/grades.ts` |
+| Auth guard | `src/proxy.ts` |
 | Admin actions | `src/app/admin/actions.ts`, `src/app/admin/auth-actions.ts` |
 | Admin UI | `src/app/admin/**` |
 | Student lookup | `src/app/student-actions.ts`, `src/app/results-checker.tsx` |
@@ -96,6 +97,7 @@ npm run dev
   course can be enrolled in others and re-uses the same PIN.
 - Tell students their default PIN is the **last 4 digits of their index number**
   unless a lecturer set a custom one.
-- Grade scales are stored per course as JSON, e.g.
-  `[{"min":80,"letter":"A"},{"min":70,"letter":"B"}, ...]`. A band applies when
-  the overall percentage is at least `min`.
+- A course's **overall score** rescales the combined columns linearly: a student
+  with 30/50 across all columns (60%) shows **24 / 40** when the overall score is
+  40. Leave it blank to keep the raw sum of column maximums. The percentage is
+  unaffected either way.

@@ -80,8 +80,10 @@ function CourseCard({ result }: { result: CourseResult }) {
           <h3 className="text-lg font-semibold text-slate-900">{result.courseName}</h3>
         </div>
         <div className="text-right">
-          <div className="text-3xl font-bold text-slate-900">{result.grade}</div>
-          <div className="text-sm text-slate-500">{result.percentage}%</div>
+          <div className="text-3xl font-bold text-slate-900">{result.percentage}%</div>
+          <div className="text-sm text-slate-500">
+            {result.mark} / {result.outOf}
+          </div>
         </div>
       </div>
 

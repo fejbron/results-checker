@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { computeResult } from "@/lib/grades";
 import { studentLookupSchema } from "@/lib/validation";
-import { DEFAULT_GRADE_SCALE, type CourseResult, type GradeBand } from "@/lib/types";
+import type { CourseResult } from "@/lib/types";
 
 export type LookupState = {
   error: string | null;
@@ -43,7 +43,7 @@ export async function lookupResults(
   // Courses this student is enrolled in.
   const { data: enrollments } = await admin
     .from("enrollments")
-    .select("courses(id, name, code, grade_scale, overall_score)")
+    .select("courses(id, name, code, overall_score)")
     .eq("student_id", student.id)
     .returns<
       {
@@ -51,7 +51,6 @@ export async function lookupResults(
           id: string;
           name: string;
           code: string;
-          grade_scale: GradeBand[];
           overall_score: number | null;
         };
       }[]
@@ -90,12 +89,7 @@ export async function lookupResults(
       maxScore: c.max_score,
       value: scoreByColumn.has(c.id) ? scoreByColumn.get(c.id)! : null,
     }));
-    const scale = course.grade_scale ?? DEFAULT_GRADE_SCALE;
-    const { mark, outOf, percentage, grade } = computeResult(
-      cells,
-      scale,
-      course.overall_score,
-    );
+    const { mark, outOf, percentage } = computeResult(cells, course.overall_score);
     return {
       courseId: course.id,
       courseName: course.name,
@@ -104,7 +98,6 @@ export async function lookupResults(
       mark,
       outOf,
       percentage,
-      grade,
     };
   });
 

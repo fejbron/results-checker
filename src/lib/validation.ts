@@ -1,14 +1,8 @@
 import { z } from "zod";
 
-export const gradeBandSchema = z.object({
-  min: z.coerce.number().min(0).max(100),
-  letter: z.string().trim().min(1).max(4),
-});
-
 export const courseSchema = z.object({
   name: z.string().trim().min(1, "Course name is required").max(120),
   code: z.string().trim().min(1, "Course code is required").max(40),
-  grade_scale: z.array(gradeBandSchema).min(1).optional(),
 });
 
 export const scoreColumnSchema = z.object({
