@@ -43,9 +43,19 @@ export async function lookupResults(
   // Courses this student is enrolled in.
   const { data: enrollments } = await admin
     .from("enrollments")
-    .select("courses(id, name, code, grade_scale)")
+    .select("courses(id, name, code, grade_scale, overall_score)")
     .eq("student_id", student.id)
-    .returns<{ courses: { id: string; name: string; code: string; grade_scale: GradeBand[] } }[]>();
+    .returns<
+      {
+        courses: {
+          id: string;
+          name: string;
+          code: string;
+          grade_scale: GradeBand[];
+          overall_score: number | null;
+        };
+      }[]
+    >();
 
   const courses = (enrollments ?? []).map((e) => e.courses).filter(Boolean);
   if (courses.length === 0) {
@@ -81,14 +91,18 @@ export async function lookupResults(
       value: scoreByColumn.has(c.id) ? scoreByColumn.get(c.id)! : null,
     }));
     const scale = course.grade_scale ?? DEFAULT_GRADE_SCALE;
-    const { total, maxTotal, percentage, grade } = computeResult(cells, scale);
+    const { mark, outOf, percentage, grade } = computeResult(
+      cells,
+      scale,
+      course.overall_score,
+    );
     return {
       courseId: course.id,
       courseName: course.name,
       courseCode: course.code,
       columns: cells,
-      total,
-      maxTotal,
+      mark,
+      outOf,
       percentage,
       grade,
     };

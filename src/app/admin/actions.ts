@@ -108,6 +108,34 @@ export async function updateGradeScale(
   return ok;
 }
 
+export async function updateOverallScore(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const courseId = String(formData.get("courseId"));
+  const raw = String(formData.get("overall_score") ?? "").trim();
+
+  // Empty clears the override (fall back to the sum of column maximums).
+  let overall_score: number | null = null;
+  if (raw !== "") {
+    const n = Number(raw);
+    if (Number.isNaN(n) || n <= 0) {
+      return fail("Overall score must be a number greater than 0 (or blank).");
+    }
+    overall_score = n;
+  }
+
+  const { supabase } = await assertCourseOwner(courseId);
+  const { error } = await supabase
+    .from("courses")
+    .update({ overall_score })
+    .eq("id", courseId);
+  if (error) return fail(error.message);
+
+  revalidatePath(`/admin/courses/${courseId}`);
+  return ok;
+}
+
 // ---------------------------------------------------------------------------
 // Score columns
 // ---------------------------------------------------------------------------

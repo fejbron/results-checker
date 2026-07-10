@@ -16,12 +16,14 @@ export default function ScoresGrid({
   students,
   scoreMap,
   gradeScale,
+  overallScore,
 }: {
   courseId: string;
   columns: Col[];
   students: Student[];
   scoreMap: Record<string, Record<string, number>>;
   gradeScale: GradeBand[];
+  overallScore: number | null;
 }) {
   const [state, action, pending] = useActionState(saveScores, initial);
 
@@ -44,6 +46,7 @@ export default function ScoresGrid({
         return { maxScore: c.maxScore, value: raw === "" ? null : Number(raw) };
       }),
       gradeScale,
+      overallScore,
     );
 
   return (
@@ -97,7 +100,7 @@ export default function ScoresGrid({
                     );
                   })}
                   <td className="py-2 pr-3 text-right tabular-nums">
-                    {r.total} / {r.maxTotal}
+                    {r.mark} / {r.outOf}
                     <span className="block text-xs text-slate-400">
                       {r.percentage}%
                     </span>

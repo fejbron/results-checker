@@ -98,7 +98,7 @@ function CourseCard({ result }: { result: CourseResult }) {
           <tr className="border-t-2 border-slate-200 font-semibold">
             <td className="py-2 text-slate-900">Total</td>
             <td className="py-2 text-right tabular-nums text-slate-900">
-              {result.total} / {result.maxTotal}
+              {result.mark} / {result.outOf}
             </td>
           </tr>
         </tbody>

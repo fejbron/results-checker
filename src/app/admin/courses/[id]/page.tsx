@@ -7,6 +7,7 @@ import AddColumnForm from "./add-column-form";
 import AddStudentForm from "./add-student-form";
 import ImportStudentsForm from "./import-students-form";
 import GradeScaleEditor from "./grade-scale-editor";
+import OverallScoreForm from "./overall-score-form";
 import ResetPinForm from "./reset-pin-form";
 import ScoresGrid from "./scores-grid";
 
@@ -113,6 +114,25 @@ export default async function CoursePage({
         <AddColumnForm courseId={course.id} />
       </section>
 
+      {/* Overall score */}
+      <section className="card space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">Overall score</h2>
+          <p className="text-sm text-slate-500">
+            Optionally scale the combined columns to a single mark — e.g. grade
+            everything out of 40. Leave blank to total the raw column maximums
+            {cols.length > 0 && (
+              <>
+                {" "}
+                (currently {cols.reduce((s, c) => s + Number(c.max_score), 0)})
+              </>
+            )}
+            .
+          </p>
+        </div>
+        <OverallScoreForm courseId={course.id} overallScore={course.overall_score} />
+      </section>
+
       {/* Grade scale */}
       <section className="card space-y-4">
         <div>
@@ -192,6 +212,7 @@ export default async function CoursePage({
             students={students}
             scoreMap={scoreMap}
             gradeScale={course.grade_scale}
+            overallScore={course.overall_score}
           />
         )}
       </section>

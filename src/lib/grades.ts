@@ -13,19 +13,34 @@ export function letterForPercentage(
   return bands.length ? bands[bands.length - 1].letter : "-";
 }
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 // Compute total, max, percentage and grade from a set of column values.
+//
+// `overallScore` (optional) scales the combined columns to a chosen denominator
+// — e.g. mark everything out of 40. When null/undefined the raw sum of the
+// column maximums is used. The returned `mark`/`outOf` are what to display as
+// the total; `percentage` and `grade` are unaffected by the scaling.
 export function computeResult(
   columns: { maxScore: number; value: number | null }[],
   scale?: GradeBand[],
+  overallScore?: number | null,
 ) {
   const total = columns.reduce((sum, c) => sum + (c.value ?? 0), 0);
   const maxTotal = columns.reduce((sum, c) => sum + c.maxScore, 0);
   const percentage = maxTotal > 0 ? (total / maxTotal) * 100 : 0;
   const grade = letterForPercentage(percentage, scale);
+
+  const outOf = overallScore != null ? overallScore : maxTotal;
+  // When outOf === maxTotal this equals `total`; otherwise it scales linearly.
+  const mark = maxTotal > 0 ? round2((total / maxTotal) * outOf) : 0;
+
   return {
     total,
     maxTotal,
-    percentage: Math.round(percentage * 100) / 100,
+    percentage: round2(percentage),
     grade,
+    mark,
+    outOf: round2(outOf),
   };
 }

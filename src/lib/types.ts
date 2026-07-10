@@ -8,6 +8,9 @@ export type Course = {
   name: string;
   code: string;
   grade_scale: GradeBand[];
+  // Optional denominator the combined columns are scaled to (e.g. 40 or 60).
+  // NULL = use the raw sum of the column maximums.
+  overall_score: number | null;
   created_at: string;
 };
 
@@ -50,8 +53,10 @@ export type CourseResult = {
   courseName: string;
   courseCode: string;
   columns: { label: string; maxScore: number; value: number | null }[];
-  total: number;
-  maxTotal: number;
+  // Displayed total: `mark` out of `outOf` (already scaled to the course's
+  // overall score when one is set).
+  mark: number;
+  outOf: number;
   percentage: number;
   grade: string;
 };
