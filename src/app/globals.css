@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
+  /* Soft blue-grey canvas, deep navy ink — matches the reference dashboard. */
+  --background: #e9eef5;
   --foreground: #0f172a;
 }
 
@@ -18,31 +19,56 @@ body {
   font-family: var(--font-sans), system-ui, Arial, Helvetica, sans-serif;
 }
 
-/* Small set of reusable component classes used across the app. Tailwind v4's
-   @apply only accepts utility classes, so each variant is self-contained. */
+/* Reusable component classes. Tailwind v4's @apply only accepts utility
+   classes, so button variants are self-contained. */
 @layer components {
+  /* Buttons — pill shaped like the reference. */
   .btn,
   .btn-primary,
   .btn-secondary,
-  .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+  .btn-danger,
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply bg-indigo-600 text-white hover:bg-indigo-700;
+    @apply bg-blue-600 text-white shadow-sm shadow-blue-600/20 hover:bg-blue-700;
   }
   .btn-secondary {
-    @apply border border-slate-300 bg-white text-slate-700 hover:bg-slate-50;
+    @apply border border-slate-200 bg-white text-slate-700 hover:bg-slate-50;
   }
   .btn-danger {
-    @apply border border-red-300 bg-white text-red-600 hover:bg-red-50;
+    @apply border border-red-200 bg-white text-red-600 hover:bg-red-50;
   }
+  .btn-ghost {
+    @apply text-slate-500 hover:bg-slate-100 hover:text-slate-700;
+  }
+
+  /* Cards & surfaces. */
+  .card {
+    @apply rounded-3xl border border-white bg-white p-6 shadow-sm shadow-slate-200/60;
+  }
+  .card-muted {
+    @apply rounded-2xl bg-slate-50 p-5;
+  }
+
+  /* Inputs. */
   .input {
-    @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200;
+    @apply w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100;
   }
   .label {
-    @apply mb-1 block text-sm font-medium text-slate-700;
+    @apply mb-1.5 block text-sm font-medium text-slate-600;
   }
-  .card {
-    @apply rounded-xl border border-slate-200 bg-white p-6 shadow-sm;
+
+  /* Coloured icon chip — the rounded pastel square in front of each stat. */
+  .icon-chip {
+    @apply flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl;
+  }
+
+  /* Sidebar nav item. */
+  .nav-item {
+    @apply flex h-11 w-11 items-center justify-center rounded-2xl text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600;
+  }
+  .nav-item-active {
+    @apply bg-blue-50 text-blue-600 hover:bg-blue-50 hover:text-blue-600;
   }
 }

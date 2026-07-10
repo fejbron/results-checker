@@ -14,29 +14,24 @@ export default function CreateCourseForm() {
   }, [state]);
 
   return (
-    <form
-      ref={formRef}
-      action={action}
-      className="card flex flex-col gap-3 sm:flex-row sm:items-end"
-    >
-      <div className="flex-1">
+    <form ref={formRef} action={action} className="space-y-3">
+      <div>
         <label className="label" htmlFor="name">
           Course name
         </label>
         <input id="name" name="name" className="input" placeholder="Introduction to Biology" required />
       </div>
-      <div className="sm:w-48">
+      <div>
         <label className="label" htmlFor="code">
           Course code
         </label>
         <input id="code" name="code" className="input" placeholder="BIO 101" required />
       </div>
-      <button type="submit" className="btn-primary" disabled={pending}>
+      <button type="submit" className="btn-primary w-full" disabled={pending}>
         {pending ? "Creating…" : "Add course"}
       </button>
-      {state.error && (
-        <p className="text-sm text-red-600 sm:self-center">{state.error}</p>
-      )}
+      {state.error && <p className="text-sm text-red-600">{state.error}</p>}
+      {state.ok && <p className="text-sm text-teal-600">Course created ✓</p>}
     </form>
   );
 }

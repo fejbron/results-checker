@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { signOut } from "./auth-actions";
+import Sidebar from "./sidebar";
 
 // Auth pages render their own full-screen layout and must not get the
 // dashboard chrome (which would also nest a second <main>).
@@ -32,25 +31,9 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link href="/admin" className="text-lg font-semibold text-slate-900">
-            Results Checker <span className="text-slate-400">· Admin</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <span className="hidden text-sm text-slate-500 sm:inline">
-              {user.email}
-            </span>
-            <form action={signOut}>
-              <button type="submit" className="btn-secondary">
-                Sign out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
+    <div className="mx-auto flex min-h-screen max-w-[1400px] gap-4 px-4">
+      <Sidebar />
+      <main className="min-w-0 flex-1 py-6">{children}</main>
     </div>
   );
 }

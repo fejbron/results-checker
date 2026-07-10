@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import { Search, BookOpen, FileText, Trophy } from "lucide-react";
 import { lookupResults, type LookupState } from "./student-actions";
 import type { CourseResult } from "@/lib/types";
 
@@ -11,7 +12,7 @@ export default function ResultsChecker() {
   const showResults = state.results !== undefined;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <form action={action} className="card">
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
@@ -42,24 +43,32 @@ export default function ResultsChecker() {
           </div>
         </div>
         {state.error && (
-          <p className="mt-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-600">
+          <p className="mt-4 rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-600">
             {state.error}
           </p>
         )}
         <button type="submit" className="btn-primary mt-4 w-full" disabled={pending}>
+          <Search className="h-4 w-4" />
           {pending ? "Checking…" : "View my results"}
         </button>
       </form>
 
       {showResults && (
-        <div className="space-y-6">
-          <h2 className="text-lg font-semibold text-slate-900">
-            Results for {state.studentName}
-          </h2>
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 px-1">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-teal-400 text-sm font-bold text-white">
+              {(state.studentName ?? "?").slice(0, 1).toUpperCase()}
+            </span>
+            <div>
+              <p className="text-xs text-slate-400">Results for</p>
+              <h2 className="font-semibold text-slate-900">{state.studentName}</h2>
+            </div>
+          </div>
+
           {state.results!.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+            <div className="card py-10 text-center text-sm text-slate-500">
               You are not enrolled in any courses yet.
-            </p>
+            </div>
           ) : (
             state.results!.map((result) => <CourseCard key={result.courseId} result={result} />)
           )}
@@ -71,40 +80,49 @@ export default function ResultsChecker() {
 
 function CourseCard({ result }: { result: CourseResult }) {
   return (
-    <div className="card">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-indigo-600">
-            {result.courseCode}
-          </p>
-          <h3 className="text-lg font-semibold text-slate-900">{result.courseName}</h3>
+    <div className="card space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="icon-chip bg-blue-50 text-blue-600">
+            <BookOpen className="h-5 w-5" />
+          </span>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+              {result.courseCode}
+            </p>
+            <h3 className="text-base font-semibold text-slate-900">{result.courseName}</h3>
+          </div>
         </div>
-        <div className="text-right">
-          <div className="text-3xl font-bold text-slate-900">{result.percentage}%</div>
-          <div className="text-sm text-slate-500">
-            {result.mark} / {result.outOf}
+        <div className="flex items-center gap-2 rounded-2xl bg-slate-50 px-4 py-2 text-right">
+          <Trophy className="h-5 w-5 text-amber-400" />
+          <div>
+            <div className="text-lg font-bold leading-none text-slate-900">
+              {result.percentage}%
+            </div>
+            <div className="text-xs text-slate-400">
+              {result.mark} / {result.outOf}
+            </div>
           </div>
         </div>
       </div>
 
-      <table className="mt-4 w-full text-left text-sm">
-        <tbody>
-          {result.columns.map((c, i) => (
-            <tr key={i} className="border-t border-slate-100">
-              <td className="py-2 text-slate-600">{c.label}</td>
-              <td className="py-2 text-right tabular-nums text-slate-900">
-                {c.value === null ? "—" : c.value} / {c.maxScore}
-              </td>
-            </tr>
-          ))}
-          <tr className="border-t-2 border-slate-200 font-semibold">
-            <td className="py-2 text-slate-900">Total</td>
-            <td className="py-2 text-right tabular-nums text-slate-900">
-              {result.mark} / {result.outOf}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <ul className="space-y-2">
+        {result.columns.map((c, i) => (
+          <li
+            key={i}
+            className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-2.5"
+          >
+            <span className="flex items-center gap-2.5 text-sm text-slate-600">
+              <FileText className="h-4 w-4 text-slate-400" />
+              {c.label}
+            </span>
+            <span className="text-sm font-semibold tabular-nums text-slate-900">
+              {c.value === null ? "—" : c.value}{" "}
+              <span className="font-normal text-slate-400">/ {c.maxScore}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
