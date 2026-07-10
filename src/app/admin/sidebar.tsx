@@ -28,13 +28,14 @@ export default function Sidebar() {
         >
           Dashboard
         </Link>
-        <Link
-          href="/"
+        <a
+          href="https://results.bronsoft.com"
           target="_blank"
+          rel="noreferrer"
           className={`${linkBase} text-slate-500 hover:bg-slate-100 hover:text-slate-700`}
         >
           Student site
-        </Link>
+        </a>
       </nav>
 
       <form action={signOut} className="mt-auto px-1">
