@@ -31,7 +31,7 @@ export default function ResetPinForm({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="text-sm text-indigo-600 hover:underline"
+        className="text-sm font-medium text-slate-900 hover:underline"
       >
         {state.ok ? "PIN updated ✓" : "Reset PIN"}
       </button>
@@ -49,7 +49,7 @@ export default function ResetPinForm({
         autoFocus
         required
       />
-      <button type="submit" className="text-sm text-indigo-600 hover:underline" disabled={pending}>
+      <button type="submit" className="text-sm font-medium text-slate-900 hover:underline" disabled={pending}>
         {pending ? "…" : "Save"}
       </button>
       <button

@@ -9,7 +9,7 @@ export default function Sidebar() {
   const onDashboard = pathname === "/admin";
 
   const linkBase =
-    "block rounded-xl px-4 py-2.5 text-sm font-medium transition-colors";
+    "block rounded-md px-4 py-2.5 text-sm font-medium transition-colors";
 
   return (
     <aside className="sticky top-0 hidden h-screen w-56 shrink-0 flex-col py-6 sm:flex">
@@ -22,7 +22,7 @@ export default function Sidebar() {
           href="/admin"
           className={`${linkBase} ${
             onDashboard
-              ? "bg-blue-50 text-blue-600"
+              ? "bg-slate-100 text-slate-900"
               : "text-slate-500 hover:bg-slate-100 hover:text-slate-700"
           }`}
         >

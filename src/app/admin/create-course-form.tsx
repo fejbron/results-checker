@@ -31,7 +31,7 @@ export default function CreateCourseForm() {
         {pending ? "Creating…" : "Add course"}
       </button>
       {state.error && <p className="text-sm text-red-600">{state.error}</p>}
-      {state.ok && <p className="text-sm text-teal-600">Course created ✓</p>}
+      {state.ok && <p className="text-sm text-emerald-600">Course created ✓</p>}
     </form>
   );
 }

@@ -74,7 +74,7 @@ export default async function CoursePage({
         ← Back to dashboard
       </Link>
       <div className="card">
-        <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
           {course.code}
         </p>
         <h1 className="text-2xl font-bold text-slate-900">{course.name}</h1>
@@ -94,7 +94,7 @@ export default async function CoursePage({
             {cols.map((col) => (
               <li
                 key={col.id}
-                className="flex items-center gap-2 rounded-full bg-slate-100 py-1.5 pl-4 pr-1.5 text-sm"
+                className="flex items-center gap-2 rounded-md bg-slate-100 py-1.5 pl-4 pr-1.5 text-sm"
               >
                 <span className="font-medium text-slate-700">{col.label}</span>
                 <span className="text-slate-400">/{col.max_score}</span>
@@ -103,7 +103,7 @@ export default async function CoursePage({
                   <input type="hidden" name="columnId" value={col.id} />
                   <button
                     type="submit"
-                    className="flex h-5 w-5 items-center justify-center rounded-full text-slate-400 hover:bg-red-100 hover:text-red-600"
+                    className="flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-red-100 hover:text-red-600"
                     title={`Delete ${col.label}`}
                   >
                     ×

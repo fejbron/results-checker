@@ -14,8 +14,6 @@ type CourseRow = {
   score_columns: { count: number }[];
 };
 
-const ACCENTS = ["text-blue-600", "text-teal-600", "text-orange-500"];
-
 export default async function AdminDashboard() {
   const supabase = await createClient();
   const {
@@ -59,12 +57,10 @@ export default async function AdminDashboard() {
 
         {/* Stat cards */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {stats.map((s, i) => (
+          {stats.map((s) => (
             <div key={s.label} className="card p-5">
               <p className="text-xs font-medium text-slate-400">{s.label}</p>
-              <p className={`mt-1 text-2xl font-bold ${ACCENTS[i % ACCENTS.length]}`}>
-                {s.value}
-              </p>
+              <p className="mt-1 text-2xl font-bold text-slate-900">{s.value}</p>
             </div>
           ))}
         </div>
@@ -88,7 +84,7 @@ export default async function AdminDashboard() {
                 <div key={course.id} className="card flex flex-col gap-4">
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                         {course.code}
                       </p>
                       <h3 className="mt-0.5 text-base font-semibold text-slate-900">
@@ -103,7 +99,7 @@ export default async function AdminDashboard() {
                       <input type="hidden" name="courseId" value={course.id} />
                       <button
                         type="submit"
-                        className="rounded-full px-3 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600"
+                        className="rounded-md px-3 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600"
                       >
                         Delete
                       </button>
@@ -111,7 +107,7 @@ export default async function AdminDashboard() {
                   </div>
                   <Link
                     href={`/admin/courses/${course.id}`}
-                    className="mt-auto text-sm font-semibold text-blue-600 hover:underline"
+                    className="mt-auto text-sm font-semibold text-slate-900 hover:underline"
                   >
                     Manage →
                   </Link>
@@ -125,14 +121,14 @@ export default async function AdminDashboard() {
       {/* Right panel */}
       <div className="space-y-4">
         <div className="card flex flex-col items-center text-center">
-          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-teal-400 text-2xl font-bold text-white">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-900 text-2xl font-bold text-white">
             {initials}
           </div>
           <h2 className="mt-3 text-lg font-semibold text-slate-900">{displayName}</h2>
           <p className="text-sm text-slate-400">Lecturer</p>
           <p className="mt-1 max-w-full truncate text-xs text-slate-400">{user?.email}</p>
 
-          <div className="mt-4 grid w-full grid-cols-3 divide-x divide-slate-100 rounded-2xl bg-slate-50 py-3">
+          <div className="mt-4 grid w-full grid-cols-3 divide-x divide-slate-200 rounded-md border border-slate-200 bg-slate-50 py-3">
             <div>
               <p className="text-base font-bold text-slate-900">{list.length}</p>
               <p className="text-[11px] text-slate-400">Courses</p>

@@ -42,7 +42,7 @@ export default function ResultsChecker() {
           </div>
         </div>
         {state.error && (
-          <p className="mt-4 rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-600">
+          <p className="mt-4 rounded-md bg-red-50 px-4 py-2.5 text-sm text-red-600">
             {state.error}
           </p>
         )}
@@ -54,7 +54,7 @@ export default function ResultsChecker() {
       {showResults && (
         <div className="space-y-4">
           <div className="flex items-center gap-3 px-1">
-            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-teal-400 text-sm font-bold text-white">
+            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-900 text-sm font-bold text-white">
               {(state.studentName ?? "?").slice(0, 1).toUpperCase()}
             </span>
             <div>
@@ -81,12 +81,12 @@ function CourseCard({ result }: { result: CourseResult }) {
     <div className="card space-y-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {result.courseCode}
           </p>
           <h3 className="text-base font-semibold text-slate-900">{result.courseName}</h3>
         </div>
-        <div className="rounded-2xl bg-slate-50 px-4 py-2 text-right">
+        <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-2 text-right">
           <div className="text-lg font-bold leading-none text-slate-900">
             {result.percentage}%
           </div>
@@ -100,7 +100,7 @@ function CourseCard({ result }: { result: CourseResult }) {
         {result.columns.map((c, i) => (
           <li
             key={i}
-            className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-2.5"
+            className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-2.5"
           >
             <span className="text-sm text-slate-600">{c.label}</span>
             <span className="text-sm font-semibold tabular-nums text-slate-900">

@@ -21,7 +21,7 @@ export default function LoginPage() {
         </div>
         <p className="mt-6 text-center text-sm text-slate-500">
           Are you a student?{" "}
-          <Link href="/" className="font-medium text-indigo-600 hover:underline">
+          <Link href="/" className="font-medium text-slate-900 hover:underline">
             Check your results
           </Link>
         </p>

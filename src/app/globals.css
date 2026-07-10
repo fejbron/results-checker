@@ -1,8 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  /* Soft blue-grey canvas, deep navy ink — matches the reference dashboard. */
-  --background: #e9eef5;
+  --background: #ffffff;
   --foreground: #0f172a;
 }
 
@@ -22,16 +21,16 @@ body {
 /* Reusable component classes. Tailwind v4's @apply only accepts utility
    classes, so button variants are self-contained. */
 @layer components {
-  /* Buttons — pill shaped like the reference. */
+  /* Buttons — black primary, lightly rounded. */
   .btn,
   .btn-primary,
   .btn-secondary,
   .btn-danger,
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50;
   }
   .btn-primary {
-    @apply bg-blue-600 text-white shadow-sm shadow-blue-600/20 hover:bg-blue-700;
+    @apply bg-slate-900 text-white hover:bg-slate-800;
   }
   .btn-secondary {
     @apply border border-slate-200 bg-white text-slate-700 hover:bg-slate-50;
@@ -45,15 +44,15 @@ body {
 
   /* Cards & surfaces. */
   .card {
-    @apply rounded-3xl border border-white bg-white p-6 shadow-sm shadow-slate-200/60;
+    @apply rounded-lg border border-slate-200 bg-white p-6;
   }
   .card-muted {
-    @apply rounded-2xl bg-slate-50 p-5;
+    @apply rounded-lg border border-slate-200 bg-slate-50 p-5;
   }
 
   /* Inputs. */
   .input {
-    @apply w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100;
+    @apply w-full rounded-md border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-slate-500 focus:ring-2 focus:ring-slate-200;
   }
   .label {
     @apply mb-1.5 block text-sm font-medium text-slate-600;
