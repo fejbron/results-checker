@@ -448,7 +448,13 @@ export async function importResults(
   }
 
   if (toInsert.length) {
-    const { error } = await supabase.from("scores").insert(toInsert);
+    // Conflict-tolerant: a score that already exists for this (column, student)
+    // is left untouched (fill-blanks-only) rather than aborting the batch. The
+    // in-memory `filled` set already skips known-existing scores; this also
+    // covers rows the preload could not see (PostgREST caps reads at 1000).
+    const { error } = await supabase
+      .from("scores")
+      .upsert(toInsert, { onConflict: "column_id,student_id", ignoreDuplicates: true });
     if (error) return fail(error.message);
   }
 
