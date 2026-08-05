@@ -6,6 +6,7 @@ import { deleteColumn, removeStudent } from "../../actions";
 import AddColumnForm from "./add-column-form";
 import AddStudentForm from "./add-student-form";
 import ImportStudentsForm from "./import-students-form";
+import ImportResultsForm from "./import-results-form";
 import OverallScoreForm from "./overall-score-form";
 import ResetPinForm from "./reset-pin-form";
 import ScoresGrid from "./scores-grid";
@@ -199,13 +200,16 @@ export default async function CoursePage({
             Add at least one score column and one student to enter results.
           </p>
         ) : (
-          <ScoresGrid
-            courseId={course.id}
-            columns={cols.map((c) => ({ id: c.id, label: c.label, maxScore: c.max_score }))}
-            students={students}
-            scoreMap={scoreMap}
-            overallScore={course.overall_score}
-          />
+          <>
+            <ImportResultsForm courseId={course.id} />
+            <ScoresGrid
+              courseId={course.id}
+              columns={cols.map((c) => ({ id: c.id, label: c.label, maxScore: c.max_score }))}
+              students={students}
+              scoreMap={scoreMap}
+              overallScore={course.overall_score}
+            />
+          </>
         )}
       </section>
     </div>
