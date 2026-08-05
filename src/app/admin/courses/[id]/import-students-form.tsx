@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { importStudents, type ActionState } from "../../actions";
 
 const initial: ActionState = { error: null };
@@ -8,6 +9,7 @@ const initial: ActionState = { error: null };
 export default function ImportStudentsForm({ courseId }: { courseId: string }) {
   const [state, action, pending] = useActionState(importStudents, initial);
   const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   // Collapse on a clean success. Collapsing unmounts the form, so its inputs
   // reset naturally on the next open (adjust-state-during-render pattern).
@@ -19,13 +21,28 @@ export default function ImportStudentsForm({ courseId }: { courseId: string }) {
     setWasOk(false);
   }
 
+  // The action revalidates the page, but the client keeps whatever it already
+  // has in the Client Cache for this route — refresh so the student table and
+  // scores grid actually re-render with the imported rows.
+  useEffect(() => {
+    if (state.ok) router.refresh();
+  }, [state, router]);
+
   if (!open) {
     return (
       <div className="flex items-center gap-3">
         <button type="button" onClick={() => setOpen(true)} className="btn-secondary">
           Import from CSV
         </button>
-        {state.ok && <span className="text-sm text-green-600">Import complete ✓</span>}
+        {state.ok && (
+          <span className="text-sm text-green-600">
+            {state.message ?? "Import complete"} ✓
+          </span>
+        )}
+        {/* A partial import reports ok *and* an error listing the skipped rows. */}
+        {state.ok && state.error && (
+          <span className="text-sm text-amber-600">{state.error}</span>
+        )}
       </div>
     );
   }
@@ -57,7 +74,9 @@ export default function ImportStudentsForm({ courseId }: { courseId: string }) {
         <button type="button" onClick={() => setOpen(false)} className="btn-secondary">
           Cancel
         </button>
-        {state.error && <span className="text-sm text-red-600">{state.error}</span>}
+        {!state.ok && state.error && (
+          <span className="text-sm text-red-600">{state.error}</span>
+        )}
       </div>
     </form>
   );

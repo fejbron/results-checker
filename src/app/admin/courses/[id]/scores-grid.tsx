@@ -9,6 +9,23 @@ type Student = { id: string; index_number: string; full_name: string };
 
 const initial: ActionState = { error: null };
 
+// Flatten the server's scores into the { "<studentId>__<columnId>": text } shape
+// the inputs are bound to.
+function buildValues(
+  students: Student[],
+  columns: Col[],
+  scoreMap: Record<string, Record<string, number>>,
+) {
+  const values: Record<string, string> = {};
+  for (const s of students) {
+    for (const c of columns) {
+      const v = scoreMap[s.id]?.[c.id];
+      values[`${s.id}__${c.id}`] = v === undefined ? "" : String(v);
+    }
+  }
+  return values;
+}
+
 export default function ScoresGrid({
   courseId,
   columns,
@@ -25,16 +42,20 @@ export default function ScoresGrid({
   const [state, action, pending] = useActionState(saveScores, initial);
 
   // Local mirror of the entered values so totals/grades update as you type.
-  const [values, setValues] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const s of students) {
-      for (const c of columns) {
-        const v = scoreMap[s.id]?.[c.id];
-        init[`${s.id}__${c.id}`] = v === undefined ? "" : String(v);
-      }
-    }
-    return init;
-  });
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    buildValues(students, columns, scoreMap),
+  );
+
+  // The state initialiser only runs on mount, so after the roster or the
+  // columns change underneath us — importing students, adding a column — the
+  // grid would keep rendering the old set of cells. Re-seed when that happens,
+  // keeping anything already in the inputs so unsaved typing survives.
+  const roster = `${students.map((s) => s.id).join(",")}|${columns.map((c) => c.id).join(",")}`;
+  const [seededFrom, setSeededFrom] = useState(roster);
+  if (seededFrom !== roster) {
+    setSeededFrom(roster);
+    setValues((prev) => ({ ...buildValues(students, columns, scoreMap), ...prev }));
+  }
 
   const rowResult = (studentId: string) =>
     computeResult(

@@ -11,7 +11,17 @@ import {
   pinResetSchema,
 } from "@/lib/validation";
 
-export type ActionState = { error: string | null; ok?: boolean };
+export type ActionState = { error: string | null; ok?: boolean; message?: string };
+
+// Rows per database round trip when importing. Keeps request bodies (and the
+// `in (...)` filters PostgREST builds from them) to a sane size.
+const BATCH_SIZE = 200;
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
 
 const ok: ActionState = { error: null, ok: true };
 const fail = (error: string): ActionState => ({ error });
@@ -122,17 +132,22 @@ export async function addColumn(
 
   const { supabase } = await assertCourseOwner(courseId);
 
-  // Place the new column at the end.
-  const { count } = await supabase
+  // Place the new column at the end. Counting rows would collide with an
+  // existing order after a delete (3 columns, drop the middle → count 2, which
+  // the last column already uses), so take the highest order and add one.
+  const { data: last } = await supabase
     .from("score_columns")
-    .select("*", { count: "exact", head: true })
-    .eq("course_id", courseId);
+    .select("display_order")
+    .eq("course_id", courseId)
+    .order("display_order", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ display_order: number }>();
 
   const { error } = await supabase.from("score_columns").insert({
     course_id: courseId,
     label: parsed.data.label,
     max_score: parsed.data.max_score,
-    display_order: count ?? 0,
+    display_order: (last?.display_order ?? -1) + 1,
   });
   if (error) return fail(error.message);
 
@@ -299,43 +314,106 @@ export async function importStudents(
   const { supabase } = await assertCourseOwner(courseId);
   const admin = createAdminClient();
 
-  let created = 0;
-  let enrolled = 0;
+  // Validate every row up front, and collapse duplicate index numbers within
+  // the file (last one wins) so we never insert the same student twice.
+  const wanted = new Map<string, { index_number: string; full_name: string; pin?: string }>();
   const errors: string[] = [];
-
   for (const raw of rows) {
     const parsed = studentSchema.safeParse(raw);
     if (!parsed.success) {
       errors.push(`${raw.index_number || "(blank)"}: ${parsed.error.issues[0].message}`);
       continue;
     }
-    try {
-      const res = await enrollStudent(admin, supabase, courseId, parsed.data);
-      enrolled++;
-      if (res.created) created++;
-    } catch (e) {
-      errors.push(`${raw.index_number}: ${e instanceof Error ? e.message : "failed"}`);
-    }
+    wanted.set(parsed.data.index_number, parsed.data);
+  }
+  if (wanted.size === 0) {
+    return fail(
+      `No valid rows found. ${errors.slice(0, 3).join("; ")}${errors.length > 3 ? "…" : ""}`,
+    );
+  }
+
+  // The whole import runs as a handful of batched queries rather than four
+  // round trips per student — that is what made large files take minutes.
+  const idByIndex = new Map<string, string>();
+  for (const batch of chunk([...wanted.keys()], BATCH_SIZE)) {
+    const { data, error } = await admin
+      .from("students")
+      .select("id, index_number")
+      .in("index_number", batch);
+    if (error) return fail(error.message);
+    for (const s of data ?? []) idByIndex.set(s.index_number, s.id);
+  }
+
+  // Only students who don't exist yet need a (deliberately expensive) PIN hash.
+  const toCreate = [...wanted.values()].filter((s) => !idByIndex.has(s.index_number));
+  const newRows = await Promise.all(
+    toCreate.map(async (s) => ({
+      index_number: s.index_number,
+      full_name: s.full_name,
+      pin_hash: await bcrypt.hash(s.pin ?? defaultPin(s.index_number), 10),
+    })),
+  );
+
+  let created = 0;
+  for (const batch of chunk(newRows, BATCH_SIZE)) {
+    // ignoreDuplicates keeps an existing student's PIN intact if someone else
+    // created them between the lookup above and this insert.
+    const { data, error } = await admin
+      .from("students")
+      .upsert(batch, { onConflict: "index_number", ignoreDuplicates: true })
+      .select("id, index_number");
+    if (error) return fail(error.message);
+    for (const s of data ?? []) idByIndex.set(s.index_number, s.id);
+    created += data?.length ?? 0;
+  }
+
+  // Anything still missing an id lost that race — fetch the winner's row.
+  const missing = [...wanted.keys()].filter((ix) => !idByIndex.has(ix));
+  for (const batch of chunk(missing, BATCH_SIZE)) {
+    const { data } = await admin
+      .from("students")
+      .select("id, index_number")
+      .in("index_number", batch);
+    for (const s of data ?? []) idByIndex.set(s.index_number, s.id);
+  }
+
+  const enrollRows = [...wanted.keys()]
+    .map((ix) => ({ course_id: courseId, student_id: idByIndex.get(ix) }))
+    .filter((r): r is { course_id: string; student_id: string } => Boolean(r.student_id));
+
+  for (const batch of chunk(enrollRows, BATCH_SIZE)) {
+    const { error } = await supabase
+      .from("enrollments")
+      .upsert(batch, { onConflict: "course_id,student_id", ignoreDuplicates: true });
+    if (error) return fail(error.message);
   }
 
   revalidatePath(`/admin/courses/${courseId}`);
 
+  const enrolled = enrollRows.length;
   const summary = `Imported ${enrolled} student${enrolled === 1 ? "" : "s"} (${created} new)`;
+
+  // A partial import is still a success: report it as one so the page refreshes
+  // and the rows that *did* import show up. The skipped rows ride along as a
+  // warning rather than turning the whole run into a failure.
   if (errors.length) {
     return {
-      error: `${summary}. ${errors.length} row${errors.length === 1 ? "" : "s"} skipped: ${errors
+      error: `${errors.length} row${errors.length === 1 ? "" : "s"} skipped: ${errors
         .slice(0, 5)
         .join("; ")}${errors.length > 5 ? "…" : ""}`,
+      ok: true,
+      message: summary,
     };
   }
-  return { error: null, ok: true };
+  return { error: null, ok: true, message: summary };
 }
 
 export async function removeStudent(formData: FormData): Promise<void> {
   const courseId = String(formData.get("courseId"));
   const studentId = String(formData.get("studentId"));
   const { supabase } = await assertCourseOwner(courseId);
-  // Removing the enrollment (and any scores for this course's columns).
+  // Drops the enrollment only. Any scores already entered for this course are
+  // kept, so re-enrolling the same student restores their marks.
   await supabase
     .from("enrollments")
     .delete()
@@ -353,8 +431,18 @@ export async function resetPin(
   const parsed = pinResetSchema.safeParse({ pin: formData.get("pin") });
   if (!parsed.success) return fail(parsed.error.issues[0].message);
 
-  // Verify the lecturer owns a course this student is enrolled in.
-  await assertCourseOwner(courseId);
+  // Verify the lecturer owns the course *and* that the student is enrolled in
+  // it. Without the enrollment check the update below (service-role, so RLS
+  // does not apply) would let any lecturer reset any student's PIN by id.
+  const { supabase } = await assertCourseOwner(courseId);
+  const { data: enrollment } = await supabase
+    .from("enrollments")
+    .select("id")
+    .eq("course_id", courseId)
+    .eq("student_id", studentId)
+    .maybeSingle();
+  if (!enrollment) return fail("That student is not enrolled in this course.");
+
   const admin = createAdminClient();
   const pin_hash = await bcrypt.hash(parsed.data.pin, 10);
   const { error } = await admin
@@ -377,39 +465,64 @@ export async function saveScores(
   const courseId = String(formData.get("courseId"));
   const { supabase } = await assertCourseOwner(courseId);
 
+  // The grid posts one field per student × column, so a full class is easily a
+  // thousand fields. Load this course's columns once — it gives us the maximum
+  // to validate against and lets us ignore any column id that isn't ours.
+  const { data: columns, error: colErr } = await supabase
+    .from("score_columns")
+    .select("id, label, max_score")
+    .eq("course_id", courseId)
+    .returns<{ id: string; label: string; max_score: number }[]>();
+  if (colErr) return fail(colErr.message);
+  const columnById = new Map<string, { id: string; label: string; max_score: number }>(
+    (columns ?? []).map((c) => [c.id, c] as const),
+  );
+
   // Field names look like: score__<studentId>__<columnId>
   const toUpsert: { column_id: string; student_id: string; value: number }[] = [];
-  const toDelete: { column_id: string; student_id: string }[] = [];
+  // Cleared cells, grouped by column so they delete in one query per column
+  // rather than one query per cell.
+  const clearedByColumn = new Map<string, string[]>();
 
   for (const [key, raw] of formData.entries()) {
     if (!key.startsWith("score__")) continue;
     const [, studentId, columnId] = key.split("__");
+    const column = columnById.get(columnId);
+    if (!studentId || !column) continue;
+
     const text = String(raw).trim();
     if (text === "") {
-      toDelete.push({ column_id: columnId, student_id: studentId });
+      const cleared = clearedByColumn.get(columnId);
+      if (cleared) cleared.push(studentId);
+      else clearedByColumn.set(columnId, [studentId]);
       continue;
     }
     const value = Number(text);
     if (Number.isNaN(value) || value < 0) {
       return fail(`Invalid score "${text}".`);
     }
+    if (value > Number(column.max_score)) {
+      return fail(`${column.label}: ${value} is above the maximum of ${column.max_score}.`);
+    }
     toUpsert.push({ column_id: columnId, student_id: studentId, value });
   }
 
-  if (toUpsert.length) {
+  for (const batch of chunk(toUpsert, BATCH_SIZE)) {
     const { error } = await supabase
       .from("scores")
-      .upsert(toUpsert, { onConflict: "column_id,student_id" });
+      .upsert(batch, { onConflict: "column_id,student_id" });
     if (error) return fail(error.message);
   }
 
-  // Clear any cleared cells.
-  for (const d of toDelete) {
-    await supabase
-      .from("scores")
-      .delete()
-      .eq("column_id", d.column_id)
-      .eq("student_id", d.student_id);
+  for (const [columnId, studentIds] of clearedByColumn) {
+    for (const batch of chunk(studentIds, BATCH_SIZE)) {
+      const { error } = await supabase
+        .from("scores")
+        .delete()
+        .eq("column_id", columnId)
+        .in("student_id", batch);
+      if (error) return fail(error.message);
+    }
   }
 
   revalidatePath(`/admin/courses/${courseId}`);
