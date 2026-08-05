@@ -5,7 +5,29 @@ import { importResults, type ActionState } from "../../actions";
 
 const initial: ActionState = { error: null };
 
-export default function ImportResultsForm({ courseId }: { courseId: string }) {
+// Quote a CSV field if it contains a comma, quote, or newline.
+function csvField(value: string): string {
+  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
+}
+
+// Build a template CSV: header = index + this course's column labels, then one
+// blank-score row per enrolled student (index filled, score cells empty).
+function buildTemplate(columns: string[], students: { index_number: string }[]): string {
+  const header = ["index", ...columns].map(csvField).join(",");
+  const trailing = ",".repeat(columns.length); // one empty cell per column
+  const rows = students.map((s) => csvField(s.index_number) + trailing);
+  return [header, ...rows].join("\n") + "\n";
+}
+
+export default function ImportResultsForm({
+  courseId,
+  columns,
+  students,
+}: {
+  courseId: string;
+  columns: string[];
+  students: { index_number: string }[];
+}) {
   const [state, action, pending] = useActionState(importResults, initial);
   const [open, setOpen] = useState(false);
 
@@ -18,6 +40,16 @@ export default function ImportResultsForm({ courseId }: { courseId: string }) {
   } else if (!state.ok && wasOk) {
     setWasOk(false);
   }
+
+  const downloadTemplate = () => {
+    const csv = buildTemplate(columns, students);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "results-template.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (!open) {
     return (
@@ -38,6 +70,17 @@ export default function ImportResultsForm({ courseId }: { courseId: string }) {
         column header must match one of this course&apos;s score columns by name.
         Only blank cells are filled — existing scores are kept. Unknown headers
         and unknown index numbers are skipped and reported.
+      </p>
+      <p className="text-sm text-slate-500">
+        <button
+          type="button"
+          onClick={downloadTemplate}
+          className="font-medium text-slate-700 underline hover:text-slate-900"
+        >
+          Download template
+        </button>{" "}
+        — a CSV with this course&apos;s columns and enrolled students, ready to
+        fill in.
       </p>
       <textarea
         name="csv"
