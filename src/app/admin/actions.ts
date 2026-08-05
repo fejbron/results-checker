@@ -331,6 +331,148 @@ export async function importStudents(
   return { error: null, ok: true };
 }
 
+// Import a wide "gradebook" CSV: first column is the index number, each
+// remaining header is matched (case-insensitive) to an existing score column
+// by label. Fills blank cells only — never overwrites or clears a saved score.
+export async function importResults(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const courseId = String(formData.get("courseId"));
+
+  // Accept either a pasted textarea or an uploaded file.
+  const file = formData.get("file");
+  let text = String(formData.get("csv") ?? "");
+  if (file instanceof File && file.size > 0) {
+    text = await file.text();
+  }
+  text = text.trim();
+  if (!text) return fail("Paste CSV rows or choose a file to import.");
+
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) {
+    return fail("Need a header row plus at least one student row.");
+  }
+
+  const { supabase } = await assertCourseOwner(courseId);
+  const admin = createAdminClient();
+
+  // Existing columns, keyed by lowercased label.
+  const { data: columns } = await supabase
+    .from("score_columns")
+    .select("id, label, max_score")
+    .eq("course_id", courseId);
+  const columnByLabel = new Map(
+    (columns ?? []).map((c) => [c.label.trim().toLowerCase(), c]),
+  );
+
+  // Map header cells → column ids. Find the index column, collect unmatched.
+  const header = splitCsvLine(lines[0]).map((h) => h.trim());
+  let indexCol = header.findIndex((h) => /index/i.test(h));
+  if (indexCol === -1) indexCol = 0;
+
+  const mapped: { pos: number; column: { id: string; label: string; max_score: number } }[] = [];
+  const unmatchedHeaders: string[] = [];
+  header.forEach((h, pos) => {
+    if (pos === indexCol || h === "") return;
+    const col = columnByLabel.get(h.toLowerCase());
+    if (col) mapped.push({ pos, column: col });
+    else unmatchedHeaders.push(h);
+  });
+
+  if (mapped.length === 0) {
+    return fail(
+      "No headers matched this course's score columns. Add the columns first, " +
+        "then match the CSV headers to their labels.",
+    );
+  }
+
+  // Preload existing scores so we can honour fill-blanks-only cheaply.
+  const columnIds = mapped.map((m) => m.column.id);
+  const filled = new Set<string>(); // `${studentId}__${columnId}`
+  {
+    const { data: existing } = await supabase
+      .from("scores")
+      .select("student_id, column_id")
+      .in("column_id", columnIds);
+    for (const s of existing ?? []) filled.add(`${s.student_id}__${s.column_id}`);
+  }
+
+  const toInsert: { column_id: string; student_id: string; value: number }[] = [];
+  const errors: string[] = [];
+  const studentsScored = new Set<string>();
+  let enrolledNew = 0;
+
+  for (let i = 1; i < lines.length; i++) {
+    const cells = splitCsvLine(lines[i]);
+    const indexNumber = (cells[indexCol] ?? "").trim();
+    if (!indexNumber) continue;
+
+    const { data: student } = await admin
+      .from("students")
+      .select("id")
+      .eq("index_number", indexNumber)
+      .maybeSingle();
+    if (!student) {
+      errors.push(`${indexNumber}: not found`);
+      continue;
+    }
+
+    // Ensure enrollment (idempotent; ignore duplicate).
+    const { error: enrollErr } = await supabase
+      .from("enrollments")
+      .insert({ course_id: courseId, student_id: student.id });
+    if (enrollErr && !enrollErr.message.toLowerCase().includes("duplicate")) {
+      errors.push(`${indexNumber}: ${enrollErr.message}`);
+      continue;
+    }
+    if (!enrollErr) enrolledNew++;
+
+    for (const m of mapped) {
+      const key = `${student.id}__${m.column.id}`;
+      const raw = (cells[m.pos] ?? "").trim();
+      if (raw === "") continue; // blank in file → skip
+      if (filled.has(key)) continue; // already has a value → keep
+      const value = Number(raw);
+      if (Number.isNaN(value) || value < 0 || value > Number(m.column.max_score)) {
+        errors.push(`${indexNumber}/${m.column.label}: invalid`);
+        continue;
+      }
+      toInsert.push({ column_id: m.column.id, student_id: student.id, value });
+      filled.add(key); // guard against duplicate rows in the same file
+      studentsScored.add(student.id);
+    }
+  }
+
+  if (toInsert.length) {
+    const { error } = await supabase.from("scores").insert(toInsert);
+    if (error) return fail(error.message);
+  }
+
+  revalidatePath(`/admin/courses/${courseId}`);
+
+  const summary =
+    `Imported ${toInsert.length} score${toInsert.length === 1 ? "" : "s"} for ` +
+    `${studentsScored.size} student${studentsScored.size === 1 ? "" : "s"}` +
+    (enrolledNew ? ` (${enrolledNew} newly enrolled)` : "");
+
+  const notes: string[] = [];
+  if (unmatchedHeaders.length) {
+    notes.push(`unmatched header${unmatchedHeaders.length === 1 ? "" : "s"}: ${unmatchedHeaders.join(", ")}`);
+  }
+  if (errors.length) {
+    notes.push(
+      `${errors.length} skipped: ${errors.slice(0, 5).join("; ")}${errors.length > 5 ? "…" : ""}`,
+    );
+  }
+
+  if (notes.length) return { error: `${summary}. ${notes.join(". ")}` };
+  return { error: null, ok: true };
+}
+
 export async function removeStudent(formData: FormData): Promise<void> {
   const courseId = String(formData.get("courseId"));
   const studentId = String(formData.get("studentId"));
