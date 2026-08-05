@@ -201,7 +201,11 @@ export default async function CoursePage({
           </p>
         ) : (
           <>
-            <ImportResultsForm courseId={course.id} />
+            <ImportResultsForm
+              courseId={course.id}
+              columns={cols.map((c) => c.label)}
+              students={students.map((s) => ({ index_number: s.index_number }))}
+            />
             <ScoresGrid
               courseId={course.id}
               columns={cols.map((c) => ({ id: c.id, label: c.label, maxScore: c.max_score }))}
