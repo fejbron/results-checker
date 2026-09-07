@@ -14,7 +14,20 @@ import ExportResultsButton from "./export-results-button";
 
 // Courses here run to several hundred students, which is far too many to render
 // (or to load scores for) in one page.
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 20;
+
+// PostgREST's `or=` filter has its own mini-syntax: commas and parentheses are
+// structural (a comma in the term makes the request fail with a 400), and
+// % _ * act as ILIKE wildcards. Strip exactly those and keep everything else,
+// so accented letters, apostrophes, hyphens and the dots in index numbers all
+// still work.
+function sanitizeSearch(raw: string) {
+  return raw
+    .replace(/[,()*%_\\"]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
 
 type EnrolledStudent = {
   id: string;
@@ -27,10 +40,15 @@ export default async function CoursePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; q?: string }>;
 }) {
   const { id } = await params;
-  const { page: pageParam } = await searchParams;
+  const { page: pageParam, q: qParam } = await searchParams;
+  const query = sanitizeSearch(qParam ?? "");
+  // Matches either field, so one box covers index numbers and names.
+  const searchFilter = query
+    ? `index_number.ilike.*${query}*,full_name.ilike.*${query}*`
+    : null;
   const supabase = await createClient();
 
   const { data: course } = await supabase
@@ -51,10 +69,11 @@ export default async function CoursePage({
   // Selecting from `students` with an inner join lets Postgres do the ordering
   // and the paging; going the other way (enrollments -> students) can only sort
   // after the rows have already been fetched.
-  const { count } = await supabase
+  const countQuery = supabase
     .from("students")
     .select("id, enrollments!inner(course_id)", { count: "exact", head: true })
     .eq("enrollments.course_id", id);
+  const { count } = await (searchFilter ? countQuery.or(searchFilter) : countQuery);
 
   const totalStudents = count ?? 0;
   const totalPages = Math.max(1, Math.ceil(totalStudents / PAGE_SIZE));
@@ -64,13 +83,16 @@ export default async function CoursePage({
     : 1;
   const offset = (page - 1) * PAGE_SIZE;
 
-  const { data: pageStudents } = await supabase
+  const rowsQuery = supabase
     .from("students")
     .select("id, index_number, full_name, enrollments!inner(course_id)")
     .eq("enrollments.course_id", id)
     .order("index_number", { ascending: true })
-    .range(offset, offset + PAGE_SIZE - 1)
-    .returns<EnrolledStudent[]>();
+    .range(offset, offset + PAGE_SIZE - 1);
+  const { data: pageStudents } = await (searchFilter
+    ? rowsQuery.or(searchFilter)
+    : rowsQuery
+  ).returns<EnrolledStudent[]>();
 
   const students = (pageStudents ?? []).map((s) => ({
     id: s.id,
@@ -104,6 +126,7 @@ export default async function CoursePage({
       offset={offset}
       shown={students.length}
       total={totalStudents}
+      query={query}
     />
   );
 
@@ -184,12 +207,43 @@ export default async function CoursePage({
         <div>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-lg font-semibold text-slate-900">Students</h2>
-            <span className="text-sm text-slate-400">{totalStudents} enrolled</span>
+            <span className="text-sm text-slate-400">
+              {query
+                ? `${totalStudents} matching “${query}”`
+                : `${totalStudents} enrolled`}
+            </span>
           </div>
           <p className="text-sm text-slate-500">
             Enroll students by index number. New students get a default PIN of
             the last 4 digits of their index number unless you set one.
           </p>
+          {/* Plain GET form: no JavaScript needed, and submitting drops the
+              `page` param so results always start at page 1. */}
+          <form
+            action={`/admin/courses/${course.id}`}
+            method="get"
+            className="flex flex-wrap items-center gap-2"
+          >
+            <input
+              type="search"
+              name="q"
+              defaultValue={query}
+              placeholder="Search index number or name"
+              aria-label="Search students by index number or name"
+              className="input sm:w-80"
+            />
+            <button type="submit" className="btn-secondary">
+              Search
+            </button>
+            {query && (
+              <Link
+                href={`/admin/courses/${course.id}`}
+                className="text-sm font-medium text-slate-500 hover:text-slate-700 hover:underline"
+              >
+                Clear
+              </Link>
+            )}
+          </form>
         </div>
         <AddStudentForm courseId={course.id} />
         <ImportStudentsForm courseId={course.id} />
@@ -227,7 +281,11 @@ export default async function CoursePage({
             </table>
           </div>
         ) : (
-          <p className="text-sm text-slate-400">No students enrolled yet.</p>
+          <p className="text-sm text-slate-400">
+            {query
+              ? `No students match “${query}”.`
+              : "No students enrolled yet."}
+          </p>
         )}
         {pager}
       </section>
@@ -238,14 +296,20 @@ export default async function CoursePage({
           <h2 className="text-lg font-semibold text-slate-900">Enter results</h2>
           <p className="text-sm text-slate-500">
             Type scores and click Save. Totals update live as you type.
-            {totalPages > 1 && (
-              <> Saving applies to the {students.length} students shown on this page.</>
+            {(totalPages > 1 || query) && (
+              <> Saving applies to the {students.length} students shown here.</>
+            )}
+            {query && (
+              <> The list is filtered by “{query}”; a download always covers the
+              whole course.</>
             )}
           </p>
         </div>
         {cols.length === 0 || students.length === 0 ? (
           <p className="text-sm text-slate-400">
-            Add at least one score column and one student to enter results.
+            {query && cols.length > 0
+              ? `No students match “${query}”.`
+              : "Add at least one score column and one student to enter results."}
           </p>
         ) : (
           <>
@@ -277,6 +341,7 @@ function Pager({
   offset,
   shown,
   total,
+  query,
 }: {
   courseId: string;
   page: number;
@@ -284,10 +349,16 @@ function Pager({
   offset: number;
   shown: number;
   total: number;
+  query: string;
 }) {
   if (totalPages <= 1) return null;
 
-  const href = (p: number) => `/admin/courses/${courseId}?page=${p}`;
+  // Paging must not drop the active search.
+  const href = (p: number) => {
+    const params = new URLSearchParams({ page: String(p) });
+    if (query) params.set("q", query);
+    return `/admin/courses/${courseId}?${params.toString()}`;
+  };
   const step = "rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium";
 
   return (
