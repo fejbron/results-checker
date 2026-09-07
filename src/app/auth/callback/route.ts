@@ -6,7 +6,16 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = request.nextUrl;
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/admin";
+
+  // Only ever forward to a path on this origin. `origin + next` with a value
+  // like "@evil.com" resolves to https://<origin>@evil.com — the host is then
+  // evil.com and the origin is just userinfo, i.e. an open redirect. "//host"
+  // is the protocol-relative variant of the same trick.
+  const requestedNext = searchParams.get("next") ?? "/admin";
+  const next =
+    requestedNext.startsWith("/") && !requestedNext.startsWith("//")
+      ? requestedNext
+      : "/admin";
 
   if (code) {
     const supabase = await createClient();

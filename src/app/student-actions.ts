@@ -6,6 +6,11 @@ import { computeResult } from "@/lib/grades";
 import { studentLookupSchema } from "@/lib/validation";
 import type { CourseResult } from "@/lib/types";
 
+// A real bcrypt hash of a random string, compared against when no student
+// matches so the unknown-index path costs the same as the wrong-PIN path.
+const DUMMY_PIN_HASH =
+  "$2b$10$YU6znOkNSio58.vnn/f/nu6YZyzMLseosfEPwQYoX3eYfz2e6zeoi";
+
 export type LookupState = {
   error: string | null;
   studentName?: string;
@@ -35,10 +40,14 @@ export async function lookupResults(
 
   // Same generic message whether the index is unknown or the PIN is wrong.
   const invalid = { error: "Index number or PIN is incorrect." };
-  if (!student) return invalid;
 
-  const match = await bcrypt.compare(parsed.data.pin, student.pin_hash);
-  if (!match) return invalid;
+  // Always run a bcrypt comparison, even when the index number is unknown, so
+  // the response time cannot be used to enumerate valid index numbers.
+  const match = await bcrypt.compare(
+    parsed.data.pin,
+    student?.pin_hash ?? DUMMY_PIN_HASH,
+  );
+  if (!student || !match) return invalid;
 
   // Courses this student is enrolled in.
   const { data: enrollments } = await admin

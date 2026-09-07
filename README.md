@@ -32,8 +32,11 @@ index number and a PIN.
 ## 1. Set up Supabase
 
 1. Create a project at [supabase.com](https://supabase.com).
-2. In the dashboard, open **SQL Editor** and run the migration in
-   [`supabase/migrations/0001_initial_schema.sql`](supabase/migrations/0001_initial_schema.sql).
+2. In the dashboard, open **SQL Editor** and run every file in
+   [`supabase/migrations/`](supabase/migrations) **in filename order**
+   (`0001_…`, then `0002_…`, and so on). They are incremental — running only
+   the initial schema leaves out the per-course overall score and the tightened
+   student write policies.
 3. Create your first lecturer/admin account (either option works):
    - **From the terminal** once `.env.local` is filled in (see below):
 
@@ -83,7 +86,7 @@ npm run dev
 
 | Area | Path |
 | --- | --- |
-| Database schema + RLS | `supabase/migrations/0001_initial_schema.sql` |
+| Database schema + RLS | `supabase/migrations/*.sql` (run in filename order) |
 | Supabase clients | `src/lib/supabase/{client,server,admin}.ts` |
 | Total / percentage computation | `src/lib/grades.ts` |
 | Auth guard | `src/proxy.ts` |

@@ -139,7 +139,7 @@ export default async function AdminDashboard() {
             </div>
             <div>
               <p className="text-base font-bold text-slate-900">{totalColumns}</p>
-              <p className="text-[11px] text-slate-400">Scores</p>
+              <p className="text-[11px] text-slate-400">Assessments</p>
             </div>
           </div>
         </div>

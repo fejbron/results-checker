@@ -10,11 +10,19 @@ import {
   studentSchema,
   pinResetSchema,
 } from "@/lib/validation";
+import { csvDocument } from "@/lib/csv";
+import { computeResult } from "@/lib/grades";
 
 export type ActionState = { error: string | null; ok?: boolean };
 
 const ok: ActionState = { error: null, ok: true };
 const fail = (error: string): ActionState => ({ error });
+
+// Postgres unique-violation. Test the SQLSTATE, not the message text — the
+// wording is version- and locale-dependent.
+function isDuplicateKey(error: { code?: string } | null) {
+  return error?.code === "23505";
+}
 
 // Ensure a lecturer is signed in; return their id or throw.
 async function requireUser() {
@@ -38,6 +46,23 @@ async function assertCourseOwner(courseId: string) {
     throw new Error("Course not found");
   }
   return { supabase, userId };
+}
+
+// Confirm a student is actually enrolled in the given course. The caller must
+// already have checked course ownership. Server Actions are reachable by direct
+// POST, so ids arriving in FormData are untrusted.
+async function assertStudentEnrolled(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  courseId: string,
+  studentId: string,
+) {
+  const { data } = await supabase
+    .from("enrollments")
+    .select("id")
+    .eq("course_id", courseId)
+    .eq("student_id", studentId)
+    .maybeSingle();
+  if (!data) throw new Error("That student is not enrolled in this course.");
 }
 
 // Default PIN = last 4 characters of the index number (min length guarded).
@@ -89,7 +114,7 @@ export async function updateOverallScore(
   let overall_score: number | null = null;
   if (raw !== "") {
     const n = Number(raw);
-    if (Number.isNaN(n) || n <= 0) {
+    if (!Number.isFinite(n) || n <= 0) {
       return fail("Overall score must be a number greater than 0 (or blank).");
     }
     overall_score = n;
@@ -216,7 +241,7 @@ async function enrollStudent(
   const { error: enrollErr } = await supabase
     .from("enrollments")
     .insert({ course_id: courseId, student_id: studentId });
-  if (enrollErr && !enrollErr.message.toLowerCase().includes("duplicate")) {
+  if (enrollErr && !isDuplicateKey(enrollErr)) {
     throw new Error(enrollErr.message);
   }
 
@@ -331,6 +356,9 @@ export async function importStudents(
   return { error: null, ok: true };
 }
 
+// Headers that `exportResults` writes for readability rather than as data.
+const EXPORT_ONLY_HEADERS = new Set(["name", "full name", "total", "out of", "percentage"]);
+
 // Import a wide "gradebook" CSV: first column is the index number, each
 // remaining header is matched (case-insensitive) to an existing score column
 // by label. Fills blank cells only — never overwrites or clears a saved score.
@@ -379,8 +407,15 @@ export async function importResults(
   header.forEach((h, pos) => {
     if (pos === indexCol || h === "") return;
     const col = columnByLabel.get(h.toLowerCase());
-    if (col) mapped.push({ pos, column: col });
-    else unmatchedHeaders.push(h);
+    if (col) {
+      mapped.push({ pos, column: col });
+      return;
+    }
+    // Columns `exportResults` adds for humans. Skipped quietly so an exported
+    // file round-trips without noise — but only when no real score column
+    // carries that label, which is why this runs after the lookup above.
+    if (EXPORT_ONLY_HEADERS.has(h.toLowerCase())) return;
+    unmatchedHeaders.push(h);
   });
 
   if (mapped.length === 0) {
@@ -401,49 +436,75 @@ export async function importResults(
     for (const s of existing ?? []) filled.add(`${s.student_id}__${s.column_id}`);
   }
 
-  const toInsert: { column_id: string; student_id: string; value: number }[] = [];
   const errors: string[] = [];
-  const studentsScored = new Set<string>();
-  let enrolledNew = 0;
 
+  // Parse every row up front so students can be resolved and enrolled in bulk.
+  // Doing it per row meant two sequential round trips per student, which for a
+  // real class is hundreds of requests and will blow the serverless time limit.
+  const rows: { indexNumber: string; cells: string[] }[] = [];
   for (let i = 1; i < lines.length; i++) {
     const cells = splitCsvLine(lines[i]);
     const indexNumber = (cells[indexCol] ?? "").trim();
     if (!indexNumber) continue;
+    rows.push({ indexNumber, cells });
+  }
 
-    const { data: student } = await admin
+  // Resolve index numbers → student ids, chunked to keep the request URL sane.
+  const studentIdByIndex = new Map<string, string>();
+  const uniqueIndexes = [...new Set(rows.map((r) => r.indexNumber))];
+  for (let i = 0; i < uniqueIndexes.length; i += 200) {
+    const { data, error } = await admin
       .from("students")
-      .select("id")
-      .eq("index_number", indexNumber)
-      .maybeSingle();
-    if (!student) {
+      .select("id, index_number")
+      .in("index_number", uniqueIndexes.slice(i, i + 200));
+    if (error) return fail(error.message);
+    for (const st of data ?? []) studentIdByIndex.set(st.index_number, st.id);
+  }
+
+  // Enroll anyone named in the file who is not already on the course.
+  const { data: alreadyEnrolled } = await supabase
+    .from("enrollments")
+    .select("student_id")
+    .eq("course_id", courseId);
+  const enrolled = new Set((alreadyEnrolled ?? []).map((e) => e.student_id));
+
+  const toEnroll = uniqueIndexes
+    .map((idx) => studentIdByIndex.get(idx))
+    .filter((id): id is string => !!id && !enrolled.has(id));
+
+  let enrolledNew = 0;
+  if (toEnroll.length) {
+    const { error } = await supabase.from("enrollments").upsert(
+      toEnroll.map((student_id) => ({ course_id: courseId, student_id })),
+      { onConflict: "course_id,student_id", ignoreDuplicates: true },
+    );
+    if (error) return fail(error.message);
+    enrolledNew = toEnroll.length;
+  }
+
+  const toInsert: { column_id: string; student_id: string; value: number }[] = [];
+  const studentsScored = new Set<string>();
+
+  for (const { indexNumber, cells } of rows) {
+    const studentId = studentIdByIndex.get(indexNumber);
+    if (!studentId) {
       errors.push(`${indexNumber}: not found`);
       continue;
     }
 
-    // Ensure enrollment (idempotent; ignore duplicate).
-    const { error: enrollErr } = await supabase
-      .from("enrollments")
-      .insert({ course_id: courseId, student_id: student.id });
-    if (enrollErr && !enrollErr.message.toLowerCase().includes("duplicate")) {
-      errors.push(`${indexNumber}: ${enrollErr.message}`);
-      continue;
-    }
-    if (!enrollErr) enrolledNew++;
-
     for (const m of mapped) {
-      const key = `${student.id}__${m.column.id}`;
+      const key = `${studentId}__${m.column.id}`;
       const raw = (cells[m.pos] ?? "").trim();
       if (raw === "") continue; // blank in file → skip
       if (filled.has(key)) continue; // already has a value → keep
       const value = Number(raw);
-      if (Number.isNaN(value) || value < 0 || value > Number(m.column.max_score)) {
+      if (!Number.isFinite(value) || value < 0 || value > Number(m.column.max_score)) {
         errors.push(`${indexNumber}/${m.column.label}: invalid`);
         continue;
       }
-      toInsert.push({ column_id: m.column.id, student_id: student.id, value });
+      toInsert.push({ column_id: m.column.id, student_id: studentId, value });
       filled.add(key); // guard against duplicate rows in the same file
-      studentsScored.add(student.id);
+      studentsScored.add(studentId);
     }
   }
 
@@ -483,7 +544,23 @@ export async function removeStudent(formData: FormData): Promise<void> {
   const courseId = String(formData.get("courseId"));
   const studentId = String(formData.get("studentId"));
   const { supabase } = await assertCourseOwner(courseId);
-  // Removing the enrollment (and any scores for this course's columns).
+
+  // Drop this student's scores for the course's columns first. `scores` hangs
+  // off `score_columns`/`students`, not `enrollments`, so deleting only the
+  // enrollment would leave orphaned scores that resurface on re-enrollment.
+  const { data: courseColumns } = await supabase
+    .from("score_columns")
+    .select("id")
+    .eq("course_id", courseId);
+  const courseColumnIds = (courseColumns ?? []).map((c) => c.id);
+  if (courseColumnIds.length) {
+    await supabase
+      .from("scores")
+      .delete()
+      .eq("student_id", studentId)
+      .in("column_id", courseColumnIds);
+  }
+
   await supabase
     .from("enrollments")
     .delete()
@@ -501,8 +578,17 @@ export async function resetPin(
   const parsed = pinResetSchema.safeParse({ pin: formData.get("pin") });
   if (!parsed.success) return fail(parsed.error.issues[0].message);
 
-  // Verify the lecturer owns a course this student is enrolled in.
-  await assertCourseOwner(courseId);
+  // Verify the lecturer owns the course AND that this student is enrolled in
+  // it. Ownership alone is not enough: the update below runs with the
+  // service-role key, so without the enrollment check any lecturer could reset
+  // any student's PIN institution-wide by POSTing an arbitrary studentId.
+  const { supabase } = await assertCourseOwner(courseId);
+  try {
+    await assertStudentEnrolled(supabase, courseId, studentId);
+  } catch (e) {
+    return fail(e instanceof Error ? e.message : "Student is not enrolled.");
+  }
+
   const admin = createAdminClient();
   const pin_hash = await bcrypt.hash(parsed.data.pin, 10);
   const { error } = await admin
@@ -525,6 +611,21 @@ export async function saveScores(
   const courseId = String(formData.get("courseId"));
   const { supabase } = await assertCourseOwner(courseId);
 
+  // The ids in the form are untrusted (Server Actions accept direct POSTs), so
+  // every cell is checked against this course's own columns and enrolled
+  // students before it is written.
+  const { data: courseColumns } = await supabase
+    .from("score_columns")
+    .select("id, label, max_score")
+    .eq("course_id", courseId);
+  const columnById = new Map((courseColumns ?? []).map((c) => [c.id, c]));
+
+  const { data: courseEnrollments } = await supabase
+    .from("enrollments")
+    .select("student_id")
+    .eq("course_id", courseId);
+  const enrolled = new Set((courseEnrollments ?? []).map((e) => e.student_id));
+
   // Field names look like: score__<studentId>__<columnId>
   const toUpsert: { column_id: string; student_id: string; value: number }[] = [];
   const toDelete: { column_id: string; student_id: string }[] = [];
@@ -532,14 +633,25 @@ export async function saveScores(
   for (const [key, raw] of formData.entries()) {
     if (!key.startsWith("score__")) continue;
     const [, studentId, columnId] = key.split("__");
+
+    const column = columnById.get(columnId);
+    if (!column || !enrolled.has(studentId)) {
+      return fail("This course's columns or students changed. Reload the page.");
+    }
+
     const text = String(raw).trim();
     if (text === "") {
       toDelete.push({ column_id: columnId, student_id: studentId });
       continue;
     }
     const value = Number(text);
-    if (Number.isNaN(value) || value < 0) {
+    if (!Number.isFinite(value) || value < 0) {
       return fail(`Invalid score "${text}".`);
+    }
+    if (value > Number(column.max_score)) {
+      return fail(
+        `${column.label}: ${value} is above the maximum of ${column.max_score}.`,
+      );
     }
     toUpsert.push({ column_id: columnId, student_id: studentId, value });
   }
@@ -551,15 +663,209 @@ export async function saveScores(
     if (error) return fail(error.message);
   }
 
-  // Clear any cleared cells.
+  // Clear any cleared cells — one request per column rather than per cell, and
+  // report a failure instead of silently leaving the old value in place.
+  const clearedByColumn = new Map<string, string[]>();
   for (const d of toDelete) {
-    await supabase
+    const ids = clearedByColumn.get(d.column_id) ?? [];
+    ids.push(d.student_id);
+    clearedByColumn.set(d.column_id, ids);
+  }
+  for (const [columnId, studentIds] of clearedByColumn) {
+    const { error } = await supabase
       .from("scores")
       .delete()
-      .eq("column_id", d.column_id)
-      .eq("student_id", d.student_id);
+      .eq("column_id", columnId)
+      .in("student_id", studentIds);
+    if (error) return fail(error.message);
   }
 
   revalidatePath(`/admin/courses/${courseId}`);
   return ok;
+}
+
+// ---------------------------------------------------------------------------
+// Export
+// ---------------------------------------------------------------------------
+
+// PostgREST caps a single response (1000 rows by default), so anything that has
+// to cover a whole course reads in pages rather than one unbounded select.
+const READ_PAGE = 1000;
+
+type EnrolledRow = { id: string; index_number: string; full_name: string };
+
+async function readAllEnrolled(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  courseId: string,
+): Promise<EnrolledRow[]> {
+  const out: EnrolledRow[] = [];
+  for (let from = 0; ; from += READ_PAGE) {
+    const { data, error } = await supabase
+      .from("students")
+      .select("id, index_number, full_name, enrollments!inner(course_id)")
+      .eq("enrollments.course_id", courseId)
+      .order("index_number", { ascending: true })
+      .range(from, from + READ_PAGE - 1)
+      .returns<EnrolledRow[]>();
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    out.push(...rows.map((r) => ({
+      id: r.id,
+      index_number: r.index_number,
+      full_name: r.full_name,
+    })));
+    if (rows.length < READ_PAGE) return out;
+  }
+}
+
+async function readAllScores(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  columnIds: string[],
+): Promise<Map<string, number>> {
+  const byKey = new Map<string, number>();
+  if (columnIds.length === 0) return byKey;
+  for (let from = 0; ; from += READ_PAGE) {
+    const { data, error } = await supabase
+      .from("scores")
+      .select("student_id, column_id, value")
+      .in("column_id", columnIds)
+      .order("student_id", { ascending: true })
+      .range(from, from + READ_PAGE - 1);
+    if (error) throw new Error(error.message);
+    const rows = data ?? [];
+    for (const r of rows) byKey.set(`${r.student_id}__${r.column_id}`, r.value);
+    if (rows.length < READ_PAGE) return byKey;
+  }
+}
+
+// Build a CSV of every entered result for a course. The leading columns match
+// what `importResults` expects (index number first, then one column per score
+// column, matched by label) so an exported file can be edited and re-imported;
+// the trailing computed columns are ignored on the way back in.
+export async function exportResults(
+  courseId: string,
+): Promise<{ csv?: string; filename?: string; error?: string }> {
+  let supabase;
+  try {
+    ({ supabase } = await assertCourseOwner(courseId));
+  } catch {
+    return { error: "Course not found." };
+  }
+
+  const { data: course } = await supabase
+    .from("courses")
+    .select("code, name, overall_score")
+    .eq("id", courseId)
+    .maybeSingle<{ code: string; name: string; overall_score: number | null }>();
+  if (!course) return { error: "Course not found." };
+
+  const { data: columns, error: colErr } = await supabase
+    .from("score_columns")
+    .select("id, label, max_score")
+    .eq("course_id", courseId)
+    .order("display_order", { ascending: true });
+  if (colErr) return { error: colErr.message };
+  const cols = columns ?? [];
+
+  let students: EnrolledRow[];
+  let scores: Map<string, number>;
+  try {
+    students = await readAllEnrolled(supabase, courseId);
+    scores = await readAllScores(supabase, cols.map((c) => c.id));
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not read results." };
+  }
+
+  if (students.length === 0) return { error: "No students are enrolled yet." };
+
+  const header = [
+    "index number",
+    "name",
+    ...cols.map((c) => c.label),
+    "total",
+    "out of",
+    "percentage",
+  ];
+
+  const rows = students.map((st) => {
+    const cells = cols.map((c) => ({
+      maxScore: Number(c.max_score),
+      value: scores.has(`${st.id}__${c.id}`)
+        ? Number(scores.get(`${st.id}__${c.id}`))
+        : null,
+    }));
+    const { mark, outOf, percentage } = computeResult(cells, course.overall_score);
+    return [
+      st.index_number,
+      st.full_name,
+      // Blank, not 0, for an ungraded cell — 0 is a real mark.
+      ...cells.map((c) => (c.value === null ? "" : c.value)),
+      mark,
+      outOf,
+      percentage,
+    ];
+  });
+
+  const slug =
+    course.code.trim().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") ||
+    "course";
+
+  return {
+    csv: csvDocument([header, ...rows]),
+    filename: `${slug}-results.csv`,
+  };
+}
+
+// A blank gradebook for this course: the header `importResults` expects plus
+// one row per enrolled student with empty score cells. Built server-side so it
+// covers every student, not just the page the lecturer happens to be viewing.
+export async function buildResultsTemplate(
+  courseId: string,
+): Promise<{ csv?: string; filename?: string; error?: string }> {
+  let supabase;
+  try {
+    ({ supabase } = await assertCourseOwner(courseId));
+  } catch {
+    return { error: "Course not found." };
+  }
+
+  const { data: course } = await supabase
+    .from("courses")
+    .select("code")
+    .eq("id", courseId)
+    .maybeSingle<{ code: string }>();
+  if (!course) return { error: "Course not found." };
+
+  const { data: columns, error: colErr } = await supabase
+    .from("score_columns")
+    .select("label")
+    .eq("course_id", courseId)
+    .order("display_order", { ascending: true });
+  if (colErr) return { error: colErr.message };
+  const labels = (columns ?? []).map((c) => c.label);
+  if (labels.length === 0) return { error: "Add at least one score column first." };
+
+  let students: EnrolledRow[];
+  try {
+    students = await readAllEnrolled(supabase, courseId);
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : "Could not read students." };
+  }
+  if (students.length === 0) return { error: "No students are enrolled yet." };
+
+  const header = ["index number", "name", ...labels];
+  const rows = students.map((st) => [
+    st.index_number,
+    st.full_name,
+    ...labels.map(() => ""),
+  ]);
+
+  const slug =
+    course.code.trim().replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "") ||
+    "course";
+
+  return {
+    csv: csvDocument([header, ...rows]),
+    filename: `${slug}-results-template.csv`,
+  };
 }
