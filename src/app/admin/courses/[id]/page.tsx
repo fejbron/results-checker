@@ -10,6 +10,11 @@ import ImportResultsForm from "./import-results-form";
 import OverallScoreForm from "./overall-score-form";
 import ResetPinForm from "./reset-pin-form";
 import ScoresGrid from "./scores-grid";
+import ExportResultsButton from "./export-results-button";
+
+// Courses here run to several hundred students, which is far too many to render
+// (or to load scores for) in one page.
+const PAGE_SIZE = 50;
 
 type EnrolledStudent = {
   id: string;
@@ -19,10 +24,13 @@ type EnrolledStudent = {
 
 export default async function CoursePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ page?: string }>;
 }) {
   const { id } = await params;
+  const { page: pageParam } = await searchParams;
   const supabase = await createClient();
 
   const { data: course } = await supabase
@@ -40,31 +48,64 @@ export default async function CoursePage({
     .order("display_order", { ascending: true })
     .returns<ScoreColumn[]>();
 
-  const { data: enrollments } = await supabase
-    .from("enrollments")
-    .select("students(id, index_number, full_name)")
-    .eq("course_id", id)
-    .returns<{ students: EnrolledStudent }[]>();
+  // Selecting from `students` with an inner join lets Postgres do the ordering
+  // and the paging; going the other way (enrollments -> students) can only sort
+  // after the rows have already been fetched.
+  const { count } = await supabase
+    .from("students")
+    .select("id, enrollments!inner(course_id)", { count: "exact", head: true })
+    .eq("enrollments.course_id", id);
 
-  const students = (enrollments ?? [])
-    .map((e) => e.students)
-    .filter(Boolean)
-    .sort((a, b) => a.index_number.localeCompare(b.index_number));
+  const totalStudents = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalStudents / PAGE_SIZE));
+  const requestedPage = Number.parseInt(pageParam ?? "1", 10);
+  const page = Number.isFinite(requestedPage)
+    ? Math.min(Math.max(requestedPage, 1), totalPages)
+    : 1;
+  const offset = (page - 1) * PAGE_SIZE;
+
+  const { data: pageStudents } = await supabase
+    .from("students")
+    .select("id, index_number, full_name, enrollments!inner(course_id)")
+    .eq("enrollments.course_id", id)
+    .order("index_number", { ascending: true })
+    .range(offset, offset + PAGE_SIZE - 1)
+    .returns<EnrolledStudent[]>();
+
+  const students = (pageStudents ?? []).map((s) => ({
+    id: s.id,
+    index_number: s.index_number,
+    full_name: s.full_name,
+  }));
 
   const cols = columns ?? [];
   const columnIds = cols.map((c) => c.id);
 
-  // Load existing scores into a { studentId: { columnId: value } } map.
+  // Scores for the visible students only. Loading the whole course in one go
+  // would silently truncate at PostgREST's row cap, and a blank cell in the
+  // grid is treated as "clear this score" on save — i.e. real data loss.
   const scoreMap: Record<string, Record<string, number>> = {};
-  if (columnIds.length) {
+  if (columnIds.length && students.length) {
     const { data: scores } = await supabase
       .from("scores")
       .select("student_id, column_id, value")
-      .in("column_id", columnIds);
+      .in("column_id", columnIds)
+      .in("student_id", students.map((s) => s.id));
     for (const s of scores ?? []) {
       (scoreMap[s.student_id] ??= {})[s.column_id] = s.value;
     }
   }
+
+  const pager = (
+    <Pager
+      courseId={course.id}
+      page={page}
+      totalPages={totalPages}
+      offset={offset}
+      shown={students.length}
+      total={totalStudents}
+    />
+  );
 
   return (
     <div className="mx-auto max-w-4xl space-y-5">
@@ -141,7 +182,10 @@ export default async function CoursePage({
       {/* Students */}
       <section className="card space-y-4">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Students</h2>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-lg font-semibold text-slate-900">Students</h2>
+            <span className="text-sm text-slate-400">{totalStudents} enrolled</span>
+          </div>
           <p className="text-sm text-slate-500">
             Enroll students by index number. New students get a default PIN of
             the last 4 digits of their index number unless you set one.
@@ -185,6 +229,7 @@ export default async function CoursePage({
         ) : (
           <p className="text-sm text-slate-400">No students enrolled yet.</p>
         )}
+        {pager}
       </section>
 
       {/* Scores grid */}
@@ -193,6 +238,9 @@ export default async function CoursePage({
           <h2 className="text-lg font-semibold text-slate-900">Enter results</h2>
           <p className="text-sm text-slate-500">
             Type scores and click Save. Totals update live as you type.
+            {totalPages > 1 && (
+              <> Saving applies to the {students.length} students shown on this page.</>
+            )}
           </p>
         </div>
         {cols.length === 0 || students.length === 0 ? (
@@ -201,11 +249,10 @@ export default async function CoursePage({
           </p>
         ) : (
           <>
-            <ImportResultsForm
-              courseId={course.id}
-              columns={cols.map((c) => c.label)}
-              students={students.map((s) => ({ index_number: s.index_number }))}
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              <ImportResultsForm courseId={course.id} />
+              <ExportResultsButton courseId={course.id} />
+            </div>
             <ScoresGrid
               courseId={course.id}
               columns={cols.map((c) => ({ id: c.id, label: c.label, maxScore: c.max_score }))}
@@ -213,9 +260,60 @@ export default async function CoursePage({
               scoreMap={scoreMap}
               overallScore={course.overall_score}
             />
+            {pager}
           </>
         )}
       </section>
+    </div>
+  );
+}
+
+// Page links for the student list and the scores grid. Both show the same
+// slice, so one `?page=` parameter drives them together.
+function Pager({
+  courseId,
+  page,
+  totalPages,
+  offset,
+  shown,
+  total,
+}: {
+  courseId: string;
+  page: number;
+  totalPages: number;
+  offset: number;
+  shown: number;
+  total: number;
+}) {
+  if (totalPages <= 1) return null;
+
+  const href = (p: number) => `/admin/courses/${courseId}?page=${p}`;
+  const step = "rounded-md border border-slate-200 px-3 py-1.5 text-sm font-medium";
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3">
+      <span className="text-sm text-slate-500">
+        Showing {offset + 1}–{offset + shown} of {total}
+      </span>
+      <div className="flex items-center gap-2">
+        {page > 1 ? (
+          <Link href={href(page - 1)} className={`${step} text-slate-700 hover:bg-slate-50`}>
+            Previous
+          </Link>
+        ) : (
+          <span className={`${step} text-slate-300`}>Previous</span>
+        )}
+        <span className="text-sm text-slate-500">
+          Page {page} of {totalPages}
+        </span>
+        {page < totalPages ? (
+          <Link href={href(page + 1)} className={`${step} text-slate-700 hover:bg-slate-50`}>
+            Next
+          </Link>
+        ) : (
+          <span className={`${step} text-slate-300`}>Next</span>
+        )}
+      </div>
     </div>
   );
 }

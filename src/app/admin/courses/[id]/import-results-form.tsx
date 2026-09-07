@@ -1,35 +1,16 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { importResults, type ActionState } from "../../actions";
+import { importResults, buildResultsTemplate, type ActionState } from "../../actions";
+import { downloadCsv } from "@/lib/csv";
 
 const initial: ActionState = { error: null };
 
-// Quote a CSV field if it contains a comma, quote, or newline.
-function csvField(value: string): string {
-  return /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-}
-
-// Build a template CSV: header = index + this course's column labels, then one
-// blank-score row per enrolled student (index filled, score cells empty).
-function buildTemplate(columns: string[], students: { index_number: string }[]): string {
-  const header = ["index", ...columns].map(csvField).join(",");
-  const trailing = ",".repeat(columns.length); // one empty cell per column
-  const rows = students.map((s) => csvField(s.index_number) + trailing);
-  return [header, ...rows].join("\n") + "\n";
-}
-
-export default function ImportResultsForm({
-  courseId,
-  columns,
-  students,
-}: {
-  courseId: string;
-  columns: string[];
-  students: { index_number: string }[];
-}) {
+export default function ImportResultsForm({ courseId }: { courseId: string }) {
   const [state, action, pending] = useActionState(importResults, initial);
   const [open, setOpen] = useState(false);
+  const [templateError, setTemplateError] = useState<string | null>(null);
+  const [building, setBuilding] = useState(false);
 
   // Collapse on a clean success. Collapsing unmounts the form, so its inputs
   // reset naturally on the next open (adjust-state-during-render pattern).
@@ -41,14 +22,23 @@ export default function ImportResultsForm({
     setWasOk(false);
   }
 
-  const downloadTemplate = () => {
-    const csv = buildTemplate(columns, students);
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "results-template.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+  // Built on the server so the template lists every enrolled student, not just
+  // the page currently on screen.
+  const downloadTemplate = async () => {
+    setBuilding(true);
+    setTemplateError(null);
+    try {
+      const res = await buildResultsTemplate(courseId);
+      if (res.error || !res.csv || !res.filename) {
+        setTemplateError(res.error ?? "Could not build the template.");
+        return;
+      }
+      downloadCsv(res.filename, res.csv);
+    } catch {
+      setTemplateError("Could not build the template.");
+    } finally {
+      setBuilding(false);
+    }
   };
 
   if (!open) {
@@ -75,12 +65,16 @@ export default function ImportResultsForm({
         <button
           type="button"
           onClick={downloadTemplate}
-          className="font-medium text-slate-700 underline hover:text-slate-900"
+          disabled={building}
+          className="font-medium text-slate-700 underline hover:text-slate-900 disabled:opacity-50"
         >
-          Download template
+          {building ? "Preparing…" : "Download template"}
         </button>{" "}
-        — a CSV with this course&apos;s columns and enrolled students, ready to
-        fill in.
+        — a CSV with this course&apos;s columns and every enrolled student,
+        ready to fill in.
+        {templateError && (
+          <span className="ml-2 text-red-600">{templateError}</span>
+        )}
       </p>
       <textarea
         name="csv"
